@@ -228,7 +228,7 @@ header = {
 
 `alg` corresponds with the hashing algorithm we want to use - in this case SHA-256 (or more technically [RSA PKCS#1 v1.5 signature with SHA-256](https://tools.ietf.org/html/draft-ietf-jose-json-web-algorithms-14#section-3.1), but we don't really have to worry about that here). `kty` means key type - our keys are RSA keys. `jwk` stands for JSON web key - a standard for sharing keys via JSON.
 
-The parts of the key we're interested in are the public key exponent (e) and the modulus (n). Helpfully our `client_key` has corresponding methods (`client_key.e` and `client_key.n`) - the only additionally steps we need to take are converting them to binary strings with `to_s(2)` ([documented here](http://ruby-doc.org/stdlib-2.3.0/libdoc/openssl/rdoc/OpenSSL/BN.html#to_s-method)), then (you guessed it), Base64 encoding them. We'll wrap the hash in a method called `header` for convenience:
+The parts of the key we're interested in are the public key exponent (e) and the modulus (n). Helpfully our `client_key` has corresponding methods (`client_key.e` and `client_key.n`) - the only additionally steps we need to take are converting them to binary strings with `to_s(2)` ([documented here](http://ruby-doc.org/stdlib-2.3.0/libdoc/openssl/rdoc/OpenSSL/BN.html#to_s-method)), then (you guessed it), Base64 encoding them. Let's also create a `header` convenience method:
 
 ```ruby
 def header
@@ -433,7 +433,7 @@ Sending the request should give us back a successful response:
     "n": "wlpAF2eAhpzJDGCco-c9hhd31NGAyhkFeivqfmt7ZQiphRiuSwF_0_3lOnCRpdpRIeVheIPVK6FofcFVmRjzdyDeZmN5ssk5oi2v1y8hSB7SM2QCoqlZ3L8uEGKzzwQfzSIQGIR56X5GrTKaCjBrzqrSM0VzRg5-gp8ZDqsyceSUaf7SgScxexfgbcaRXtJ1aVLYT5FfsDgV768gRcBxaKQapFQ47M7JN8OTOq6QIla6acp24eNo6PMtH8Mf0hJwpcWOs2A_0VcNzV7XBl8shYEeERyqbNXIZsF7njF8WInk7-v0EiYPV2w0xjBuFnbX7cw8YqveG81yirYGScR5ASeER5dxtWNyXFXkK9KpI13Vvf-0ivzrgeJTUsKz7EAjL2vof2QleKZHjP6f63rvaIMK5FaGojhHSzzMdeP3FaG1mP7N5vY3J0oZzhny_Jd9vNysCiklsUNUr8ZT-ocTKHbiO6ZEZdj8Wtjmpr5kvfPUtosNodaMUNFv-7UFRWNf49qJKo21UzpeeM7Us0hKPNVd9VU0qD0jsya7w1EjimiBqwo6vD_KoH-R2bwWlaQ9Ucy6ahfNPogI3zqMTpUfMXGA0uMj6anp-daOSwuEus2ogY0x12OUn3XivB9VzbCNadAT9JqKRrhRHE-7tfN6TFt7CtLjGCe1ShMn3wsMFBU",
     "e": "AQAB"
   },
-  "contact": ["mailto:alex@peg.co"],
+  "contact": ["mailto:me@alexpeattie.com"],
   "agreement": "https://letsencrypt.org/documents/LE-SA-v1.0.1-July-27-2015.pdf",
   "initialIp": "101.222.66.199",
   "createdAt": "2015-12-12T12:07:23.755314388Z"
@@ -487,7 +487,7 @@ The next step is to inform Let's Encrypt which domain or subdomain we to provisi
 
 Challenges are how we prove a sufficient level of control over the identifier (domain name) in question. We can do this either by serving a specific response when LE hits a specific URL (which generally means uploading a file to our web-server), provisioning a DNS record, or by leveraging [Server Name Indication](https://tools.ietf.org/html/rfc6066#section-3) extension of TLS to serve a special self-signed certificate.
 
-We'll cover the first two kinds of challenge: `http-01` and `dns-01` but not the third (`tls-sni-02`).
+We'll cover the first two kinds of challenge: `http-01` and `dns-01` but not the third (`tls-sni-01`).
 
 <br>
 
@@ -577,7 +577,7 @@ The `"uri"` of the challenge will allow us to notify LE that we're ready to take
 ]
 ```
 
-Which would mean we'd have to either pass both challenges 0 & 1 (the `"email-01"` and `"http-01"` challenges), or just challenge 2 or 3 (`"tls-sni-01"` or `"dns-01"`).
+Which would mean we'd have to either pass both challenges 0 & 1 (the `"email-01"` and `"http-01"` challenges), or challenge 2 or challenge 3 (`"tls-sni-01"` or `"dns-01"`).
 
 <br>
 
@@ -587,7 +587,7 @@ Our first option is the `http-01` challenge. To pass this we need to ensure that
 
 `http://<< Domain >>/.well-known/acme-challenge/<< Challenge token >>`
 
-They receive a specific response (more on that below). Our domain is **le.alexpeattie.com**, **.well-known/acme-challenge/** is a fixed path defined by ACME, and our challenge token is `w2iwBwQq2ByOTEBm6oWtq5nNydu3Oe0tU_H24X-8J10`, so the endpoint we'll need to serve the response from is:
+They receive a specific response (more on that below). Our domain is `le.alexpeattie.com`, `.well-known/acme-challenge/` is a fixed path [defined](https://tools.ietf.org/html/draft-ietf-acme-acme-01#section-7.2) by ACME, and our challenge token is `w2iwBwQq2ByOTEBm6oWtq5nNydu3Oe0tU_H24X-8J10`, so the endpoint we'll need to serve the response from is:
 
 `http://le.alexpeattie.com/.well-known/acme-challenge/w2iwBwQq2ByOTEBm6oWtq5nNydu3Oe0tU_H24X-8J10`
 
@@ -1087,7 +1087,7 @@ We'll need to enter the name (our subdomain `le`) and set **Address** to our dro
 
 We should be ready to go, and the domain (e.g. <le.alexpeattie.com>) should serve the default nginx welcome page. We might have to wait a while for our DNS changes to propagate.
 
-![nginx welcome](https://cloud.githubusercontent.com/assets/636814/13723640/6181806e-e863-11e5-8889-838f1d333da7.png)
+<p align='center'><img src="https://cloud.githubusercontent.com/assets/636814/13723640/6181806e-e863-11e5-8889-838f1d333da7.png" alt="nginx welcome"></p>
 
 <br>
 

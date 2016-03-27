@@ -1,4 +1,4 @@
-%w(openssl base64 json httparty dnsimple tempfile net/scp).each { |lib| require lib }
+%w(openssl base64 json httparty dnsimple tempfile net/scp resolv).each { |lib| require lib }
 
 HTTParty::Basement.default_options.update(debug_output: $stdout)
 
