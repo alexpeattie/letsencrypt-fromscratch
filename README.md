@@ -937,11 +937,11 @@ http {
 
 Lastly let's run some tests to ensure our certificates are correctly and securely installed. There are a few tools out there, [Qualys SSL Server Test](https://www.ssllabs.com/ssltest/) is the most widely used. Using our new certificate with the strict cipher list, with either an [ECDSA certificate](https://www.ssllabs.com/ssltest/analyze.html?d=leecdsa.alexpeattie.com) or a [standard certificate with a 4096-bit DH param](https://www.ssllabs.com/ssltest/analyze.html?d=le.alexpeattie.com) we'll net top marks with a perfect A+ score:
 
-<img width="600" alt="A+ perfect score" src="https://cloud.githubusercontent.com/assets/636814/14065330/38b0c260-f41d-11e5-9e12-92b1b04adadf.png">
+<p align='center'><img width="600" alt="A+ perfect score" src="https://cloud.githubusercontent.com/assets/636814/14065330/38b0c260-f41d-11e5-9e12-92b1b04adadf.png"></p>
 
 Using [cipherli.st](https://cipherli.st/)'s recommended ciphers, we'll score fractionally lower, with 90 points Cipher Strength:
 
-<img width="600" alt="A+ almost perfect score" src="https://cloud.githubusercontent.com/assets/636814/14065333/3e647d50-f41d-11e5-8784-de8ba408a033.png">
+<p align='center'><img width="600" alt="A+ almost perfect score" src="https://cloud.githubusercontent.com/assets/636814/14065333/3e647d50-f41d-11e5-8784-de8ba408a033.png"></p>
 
 Some other useful testing tools:
 
