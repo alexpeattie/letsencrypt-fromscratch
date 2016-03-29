@@ -790,12 +790,12 @@ certificate = OpenSSL::X509::Certificate.new(certificate_response.body)
 
 #### Adding intermediates
 
-We also need to complete our trust chain, which means grabbing the LetsEncrypt cross-signed intermediate certificate [from here](https://letsencrypt.org/certs/lets-encrypt-x1-cross-signed.pem.txt). Some browsers will resolve an incomplete trust chain, but it's something we want to avoid. There's much more info on why we need to complete this step and the difference between the different intermediates LE offers in [Appendix 2: The trust chain & intermediate certificates](#appendix-2-the-trust-chain--intermediate-certificates).
+We also need to complete our trust chain, which means grabbing the LetsEncrypt cross-signed intermediate certificate [from here](https://letsencrypt.org/certs/lets-encrypt-x3-cross-signed.pem.txt). Some browsers will resolve an incomplete trust chain, but it's something we want to avoid. There's much more info on why we need to complete this step and the difference between the different intermediates LE offers in [Appendix 2: The trust chain & intermediate certificates](#appendix-2-the-trust-chain--intermediate-certificates).
 
 Occasionally server software might want us to provide our intermediate certificates separately, but generally we'll bundle them together in a single file:
 
 ```ruby
-intermediate = HTTParty.get('https://letsencrypt.org/certs/lets-encrypt-x1-cross-signed.pem').body
+intermediate = HTTParty.get('https://letsencrypt.org/certs/lets-encrypt-x3-cross-signed.pem').body
 IO.write('chained.pem', [certificate.to_pem, intermediate].join("\n"))
 ```
 
@@ -970,7 +970,7 @@ In the future Let's Encrypt hopes to have its own trusted root CA: [ISRG Root X1
 
 'Issued' is a bit of oversimplification here - in fact, Identrust just cross-signed LE's CA certificate, but it achieves the same end-result: trust in all major browsers/OSes.
 
-So our complete trust chain should include our certificate, the [certificate of Let's Encrypt's intermediate CA](https://letsencrypt.org/certs/lets-encrypt-x1-cross-signed.pem.txt) (Let’s Encrypt Authority X1), and optionally the Identrust CA's [trusted root certificate](https://raw.githubusercontent.com/EFForg/https-everywhere/master/cert-validity/mozilla/builtin-certs/DST_Root_CA_X3.crt). In reality there's no point making the client download the root certificate - it needs to already be in the trust store anywhere. As RFC 2246 says:
+So our complete trust chain should include our certificate, the [certificate of Let's Encrypt's intermediate CA](https://letsencrypt.org/certs/lets-encrypt-x3-cross-signed.pem.txt) (Let’s Encrypt Authority X3), and optionally the Identrust CA's [trusted root certificate](https://raw.githubusercontent.com/EFForg/https-everywhere/master/cert-validity/mozilla/builtin-certs/DST_Root_CA_X3.crt). In reality there's no point making the client download the root certificate - it needs to already be in the trust store anywhere. As RFC 2246 says:
 
 > Because certificate validation requires that root keys be distributed independently, the self-signed certificate which specifies the root certificate authority may optionally be omitted from the chain, under the assumption that the remote end must already possess it in order to validate it in any case.
 

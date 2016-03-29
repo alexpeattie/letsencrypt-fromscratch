@@ -147,7 +147,7 @@ certificate_response = signed_request(CA + "/acme/new-cert", {
 })
 
 certificate = OpenSSL::X509::Certificate.new(certificate_response.body)
-intermediate = HTTParty.get('https://letsencrypt.org/certs/lets-encrypt-x1-cross-signed.pem').body
+intermediate = HTTParty.get('https://letsencrypt.org/certs/lets-encrypt-x3-cross-signed.pem').body
 
 IO.write(domain_filename + '-cert.pem', certificate.to_pem)
 IO.write(domain_filename + '-chained.pem', [certificate.to_pem, intermediate].join("\n"))
