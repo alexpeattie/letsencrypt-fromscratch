@@ -1,6 +1,6 @@
-# Let's Encrypt from Scratch
+# Building a Let's Encrypt client from scratch
 
-#### A step-by-step guide to building an ACME client in <150 lines of code
+#### A step-by-step guide to building a LE/ACME client in <150 lines of code
 <p align='center'><img src='https://letsencrypt.org/images/letsencrypt-logo-horizontal.svg'></p>
 
 This is a (pretty detailed) how-to on building a simple ACME client from scratch, able to issue real certificates from [Let's Encrypt](https://letsencrypt.org). I've skipped things like error handling, object orientedness, tests - but not much tweaking would be needed for the client to be production-ready.
