@@ -1,13 +1,13 @@
-%w(openssl base64 json httparty dnsimple tempfile net/scp resolv).each { |lib| require lib }
+%w(openssl base64 json httparty dnsimple tempfile net/scp resolv nitlink/response).each { |lib| require lib }
 
 HTTParty::Basement.default_options.update(debug_output: $stdout)
 
 # Ruby EC key implementation monkey-patch (see https://alexpeattie.com/blog/signing-a-csr-with-ecdsa-in-ruby)
 OpenSSL::PKey::EC.send(:alias_method, :private?, :private_key?)
 
-CA = 'https://acme-v01.api.letsencrypt.org'.freeze
+DIRECTORY_URI = 'https://acme-v01.api.letsencrypt.org/directory'.freeze
 domain, root_domain, email = 'le.example.com', 'example.com', 'me@example.com'
-preferred_challenge = 'dns-01' # or 'dns-01', 
+preferred_challenge = 'http-01' # or 'dns-01', 
 certificate_type = 'rsa' # or ecdsa
 
 def base64_le(data)
@@ -38,7 +38,11 @@ def hash_algo
 end
 
 def nonce
-  HTTParty.head(CA + '/directory')["Replay-Nonce"]
+  HTTParty.head(DIRECTORY_URI)['Replay-Nonce']
+end
+
+def endpoints
+  @endpoints ||= HTTParty.get(DIRECTORY_URI).to_h
 end
 
 def signed_request(url, payload)
@@ -62,13 +66,20 @@ def upload(local_path, remote_path)
   Net::SCP.upload!(server_ip, 'root', local_path, remote_path)
 end
 
-signed_request(CA + '/acme/new-reg', {
+new_registration = signed_request(endpoints['new-reg'], {
   resource: 'new-reg',
-  contact: ['mailto:' + email],
-  agreement: 'https://letsencrypt.org/documents/LE-SA-v1.0.1-July-27-2015.pdf'
+  contact: ['mailto:' + email]
 })
 
-auth = signed_request(CA + '/acme/new-authz', {
+# accept Subscriber Agreement
+if new_registration.code == 201
+  signed_request(new_registration.headers['Location'], {
+    resource: 'reg',
+    agreement: new_registration.links.by_rel('terms-of-service').target
+  })
+end
+
+auth = signed_request(endpoints['new-authz'], {
   resource: 'new-authz',
   identifier: {
     type: 'dns',
@@ -92,12 +103,12 @@ if preferred_challenge == 'http-01'
 end
 
 if preferred_challenge == 'dns-01'
-  record_name = "_acme-challenge." + domain.sub(root_domain, '').chomp('.')
+  record_name = '_acme-challenge.' + domain.sub(root_domain, '').chomp('.')
   challenge, challenge_response = dns_challenge, [dns_challenge['token'], thumbprint].join('.')
   record_contents = base64_le(hash_algo.digest challenge_response)
 
   dnsimple = Dnsimple::Client.new(username: ENV['DNSIMPLE_USERNAME'], api_token: ENV['DNSIMPLE_TOKEN'])
-  challenge_record = dnsimple.domains.create_record(root_domain, record_type: "TXT", name: record_name, content: record_contents)
+  challenge_record = dnsimple.domains.create_record(root_domain, record_type: 'TXT', name: record_name, content: record_contents, ttl: 60)
 
   loop do
     resolved_record = Resolv::DNS.open { |r| r.getresources("#{record_name}.#{root_domain}", Resolv::DNS::Resource::IN::TXT) }[0]
@@ -108,7 +119,7 @@ if preferred_challenge == 'dns-01'
 end
 
 signed_request(challenge['uri'], {
-  resource: "challenge",
+  resource: 'challenge',
   keyAuthorization: challenge_response
 })
 
@@ -127,7 +138,7 @@ dnsimple.domains.delete_record(root_domain, challenge_record.id) if defined?(:ch
 domain_key = case certificate_type
   when 'rsa' then OpenSSL::PKey::RSA.new(4096)
   when 'ecdsa' then OpenSSL::PKey::EC.new('secp384r1').generate_key
-  else raise "Unknown certificate type"
+  else raise 'Unknown certificate type'
 end
 
 domain_filename = domain.gsub('.', '-')
@@ -141,13 +152,12 @@ csr.public_key = case certificate_type
 end
 csr.sign domain_key, hash_algo
 
-certificate_response = signed_request(CA + "/acme/new-cert", {
-  resource: "new-cert",
+certificate_response = signed_request(endpoints['new-cert'], {
+  resource: 'new-cert',
   csr: base64_le(csr.to_der),
 })
-
 certificate = OpenSSL::X509::Certificate.new(certificate_response.body)
-intermediate = HTTParty.get('https://letsencrypt.org/certs/lets-encrypt-x3-cross-signed.pem').body
+intermediate = OpenSSL::X509::Certificate.new HTTParty.get(certificate_response.links.by_rel('up').target).body
 
 IO.write(domain_filename + '-cert.pem', certificate.to_pem)
 IO.write(domain_filename + '-chained.pem', [certificate.to_pem, intermediate].join("\n"))

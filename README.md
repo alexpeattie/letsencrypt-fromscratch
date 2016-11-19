@@ -19,7 +19,7 @@ The guide and client code are all [MIT licensed](https://github.com/alexpeattie/
 
 #### Technology
 
-This example code is written in Ruby (I used 2.3), and is largely dependency free (apart from OpenSSL). We use [HTTParty](https://github.com/jnunemaker/httparty) for more convenient API requests - but you could use vanilla `Net::HTTP` if you're a masochist :see_no_evil:. And we'll use additional gems to upload files and provision DNS records.
+This example code is written in Ruby (I used 2.3), and is largely dependency free (apart from OpenSSL). We use [HTTParty](https://github.com/jnunemaker/httparty) and [Nitlink](https://github.com/alexpeattie/nitlink) for more convenient API requests - but you could use vanilla `Net::HTTP` if you're a masochist :see_no_evil:. And we'll use additional gems to upload files and provision DNS records.
 
 The choice of language is meant to be a background factor - the guide is (hopefully) illustrative & understandable even if you're not familiar with/interested in Ruby.
 
@@ -36,7 +36,8 @@ I heavily referenced Daniel Roesler's absolutely awesome [acme-tiny](https://git
     * [Header](#c-header)
     * [Protected header and the nonce](#d-protected-header-and-the-nonce)
     * [Signature](#e-signature)
-    * [Making the request](#f-making-the-request)
+    * [Making requests](#f-making-requests)
+    * [Fetching the endpoints](#g-fetching-the-endpoints)
   * [Registering with Let's Encrypt](#3-registering-with-lets-encrypt)
     * [Responses](#responses)
   * [Passing the challenge](#4-passing-the-challenge)
@@ -60,14 +61,17 @@ I heavily referenced Daniel Roesler's absolutely awesome [acme-tiny](https://git
   * [Appendix 4: Multiple subdomains](#appendix-4-multiple-subdomains)
   * [Appendix 5: Key size](#appendix-5-key-size)
     * [ECDSA keys](#ecdsa-keys)
+  * [Appendix 6: IDN support](#appendix-6-idn-support)
   * [Further reading](#further-reading)
     * [TLS/SSL in general](#tlsssl-in-general)
     * [Let's Encrypt](#lets-encrypt)
   * [Image credits](#image-credits)
+  * [Author](#author)
+  * [Changelog](#changelog)
 
 ## 1. Loading our client key-pair
 
-<p align="center"><img src="https://pixabay.com/static/uploads/photo/2014/04/02/10/20/skeleton-key-303535_960_720.png" width='200'></p>
+<p align="center"><img src="https://cloud.githubusercontent.com/assets/636814/20456560/d7c28f1a-ae70-11e6-9040-32df7534c00f.png" width='200'></p>
 
 The process of generating our certificate heavily depends on have a **client key** - or, more accurately key-pair (comprising our public key and private key).
 
@@ -79,7 +83,7 @@ It's fine to use existing SSH keys, if you've already got them generated and the
 openssl rsa -in ~/.ssh/id_rsa -text -noout | head -n 1
 ```
 
-If you see or `Private-Key: (2048 bit)` or `Private-Key: (4096 bit)` you're good to go (if you're interested, there's more info about key size in [Appendix 5](#appendix-5-key-size). Otherwise, we'll need to generate them - [Github has great instructions on how](https://help.github.com/articles/generating-a-new-ssh-key/). Let's begin by loading our key-pair into Ruby:
+If you see or `Private-Key: (2048 bit)` or `Private-Key: (4096 bit)` you're good to go (if you're interested, there's more info about key size in [Appendix 5](#appendix-5-key-size)). Otherwise, we'll need to generate them - [Github has great instructions on how](https://help.github.com/articles/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent/). Let's begin by loading our key-pair into Ruby:
 
 ```ruby
 require 'openssl'
@@ -91,7 +95,7 @@ client_key = OpenSSL::PKey::RSA.new IO.read(client_key_path)
 If our key is encrypted with a passphrase, we'll need to provide that as a 2nd argument:
 
 ```ruby
-client_key = OpenSSL::PKey::RSA.new IO.read(client_key_path), 'letmein'
+client_key = OpenSSL::PKey::RSA.new(IO.read(client_key_path), 'letmein')
 ```
 
 <br>
@@ -140,7 +144,7 @@ This is what's called a JWS (JSON Web Signature), specifically a ["JWS Using Fla
 One problem we'll run into is that when we sign our payload with our key, we might not get ASCII out, even if we're only putting ASCII in. We can see this for ourselves:
 
 ```ruby
-puts client_key.sign OpenSSL::Digest::SHA256.new, "Hello world"
+puts client_key.sign OpenSSL::Digest::SHA256.new, 'Hello world'
 ��ۉ��7�xM��\�AU=�KGQ��ao�:Q-H�WW�a_Ԇ����+a
                                           ��|X]�s}V�oya���'68L6����P����f��yKV���
 �I@���a��[�����C���VXM+�
@@ -182,7 +186,7 @@ end
 
 #### b. Payload
 
-The *payload* is the simplest part of our request. It's just JSON that we'll Base64 encode using our method above:
+The **payload** is the simplest part of our request. It's just JSON that we'll Base64 encode using our method above:
 
 ```ruby
 base64_le '{"resource":"new-reg"}'
@@ -194,7 +198,7 @@ This a totally valid payload that we can send to Let's Encrypt. Obviously it'll 
 ```ruby
 require 'json'
 
-base64_le JSON.dump(resource: "new-reg")
+base64_le JSON.dump(resource: 'new-reg')
  #=> "eyJyZXNvdXJjZSI6ICJuZXctcmVnIn0"
 ```
 
@@ -213,7 +217,7 @@ That's all we need for our payload :smile:! As well as providing information abo
 
 #### c. Header
 
-We'll need to give Let's Encrypt 2 things for it to validate the authenticity of the request: our public key, and the cryptographic hashing algorithm we're using to generate the signature. This info will go in our **header**.
+We'll need to give Let's Encrypt two things for it to validate the authenticity of the request: our public key, and the cryptographic hashing algorithm we're using to generate the signature. This info will go in our **header**.
 
 The static parts of our header are as follows:
 
@@ -247,7 +251,7 @@ end
 
 #### d. Protected header and the nonce
 
-We have our plaintext header - which contains the required components of our public key. We'll also need a *protected header* - basically a Base64 encoded version of our header which will form the other half of the data we'll be signing (alongside our payload).
+We have our plaintext header - which contains the required components of our public key. We'll also need a **protected header** - basically a Base64 encoded version of our header which will form the other half of the data we'll be signing (alongside our payload).
 
 The protected header contains one additional element which our unprotected header doesn't - a [cryptographic nonce](https://en.wikipedia.org/wiki/Cryptographic_nonce). The linked article goes into lots of details, but a nonce is basically a one-time use code which we must attach to our request. It means if an attacker somehow sniffs out a request we made, and makes a carbon-copy duplicate request, the attackers attempt will fail (because the nonce has already been used).
 
@@ -265,6 +269,8 @@ gem install httparty
 require 'httparty'
 ```
 
+(Note: you can also grab the [`Gemfile`](./Gemfile) provided in this repository, and `bundle install` to save yourself some typing.)
+
 We'll send HTTParty's debug output to `$stdout` so we can see easily see the requests/responses happening:
 
 ```ruby
@@ -274,7 +280,7 @@ HTTParty::Basement.default_options.update(debug_output: $stdout)
 As mentioned above, any Let's Encrypt API endpoint will do - let's use the `/directory` endpoint (effectively the root of the API). Because we only need the headers, we can just make a `HEAD` request:
 
 ```ruby
-nonce = HTTParty.head('https://acme-v01.api.letsencrypt.org/directory')["Replay-Nonce"]
+nonce = HTTParty.head('https://acme-v01.api.letsencrypt.org/directory')['Replay-Nonce']
 ```
 
 We can now create our protected header:
@@ -287,7 +293,7 @@ protected = base64_le(header.merge(nonce: nonce))
 
 #### e. Signature
 
-The last step is to prove the authenticity of our request with a *signature*, generated using our **client private key**. First let's consolidate everything we have so far:
+The last step to construct our request is proving its authenticity with a **signature**, generated using our *client private key*. First, let's consolidate everything we have so far:
 
 ```ruby
 require 'openssl'
@@ -314,7 +320,7 @@ header = {
   }
 }
 
-nonce = HTTParty.head('https://acme-v01.api.letsencrypt.org/directory')["Replay-Nonce"]
+nonce = HTTParty.head('https://acme-v01.api.letsencrypt.org/directory')['Replay-Nonce']
 
 request = {
   payload: base64_le(payload),
@@ -337,15 +343,15 @@ request[:signature] = client_key.sign(hash_algo, [ request[:protected], request[
 
 <br>
 
-#### f. Making the request
+#### f. Making requests
 
-Now we've built the request data just as Let's Encrypt wants, the final step is making the request:
+Now we've built the request data just as Let's Encrypt wants, we have everything we need to start making requests:
 
 ```ruby
-HTTParty.post('https://acme-v01.api.letsencrypt.org/something', body: JSON.dump(request))
+HTTParty.post(some_api_endpoint, body: JSON.dump(request))
 ```
 
-Let's put everything into a reusable method that can take an arbitrary URL and payload. (We'll move `client_key`, `hash_algo` and `header` into methods at the same time):
+Let's put everything into a reusable method that can take an arbitrary URL and payload. (We'll move `client_key`, `hash_algo`, `header` and `nonce` into methods at the same time):
 
 ```ruby
 HTTParty::Basement.default_options.update(debug_output: $stdout)
@@ -372,6 +378,10 @@ def hash_algo
   OpenSSL::Digest::SHA256.new
 end
 
+def nonce
+  HTTParty.head('https://acme-v01.api.letsencrypt.org/directory')['Replay-Nonce']
+end
+
 def signed_request(url, payload)
   request = {
     payload: base64_le(payload),
@@ -383,35 +393,78 @@ def signed_request(url, payload)
   HTTParty.post(url, body: JSON.dump(request))
 end
 ```
+<br>
+
+#### g. Fetching the endpoints
+
+The `/directory` endpoint that we use to fetch our nonce serves another purpose: it lists all the other endpoints which act as the starting points for all the core actions (registering a user, authorizing a domain, issuing a certificate etc.):
+
+```json
+{
+  "key-change": "https://acme-staging.api.letsencrypt.org/acme/key-change",
+  "new-authz": "https://acme-staging.api.letsencrypt.org/acme/new-authz",
+  "new-cert": "https://acme-staging.api.letsencrypt.org/acme/new-cert",
+  "new-reg": "https://acme-staging.api.letsencrypt.org/acme/new-reg",
+  "revoke-cert": "https://acme-staging.api.letsencrypt.org/acme/revoke-cert"
+}
+```
+
+(Note: unlike the API's endpoints, the directory is viewable without any kind of signing, you can just visit it [in your browser](https://acme-staging.api.letsencrypt.org/directory)).
+
+Here the keys in the JSON object indicate the resource type, and the values are the URI we'll need to make a signed request to. Even though [Cool URIs don't change](https://www.w3.org/Provider/Style/URI), using the directory means we don't have to hard-code the endpoints - and so our client is more resilient to any changes Let's Encrypt might make (credit to [@kelunik](https://github.com/kelunik) for suggesting this).
+
+To avoid making repeated requests to the directory, let's make an `endpoints` method:
+
+```ruby
+def endpoints
+  @endpoints ||= HTTParty.get('https://acme-v01.api.letsencrypt.org/directory').to_h
+end
+```
+
+Since we're referencing the directory endpoint in both our `endpoints` and `nonce` methods, we can dry up our code by moving it into a constant. This will also make it easier to, for example, switch to LE's [staging server](https://acme-staging.api.letsencrypt.org/).
+
+```ruby
+DIRECTORY_URI = 'https://acme-v01.api.letsencrypt.org/directory'.freeze
+
+def nonce
+  HTTParty.head(DIRECTORY_URI)['Replay-Nonce']
+end
+
+def endpoints
+  @endpoints ||= HTTParty.get(DIRECTORY_URI).to_h
+end
+```
+
+The neat thing is that this `DIRECTORY_URI` is the only URI we need to hardcode, every other endpoint we can either pull from the directory, or from the `Location` or `Link` headers of the API's responses. `Location` is easy to work with (it's just a single URI) - but `Link` headers need to be parsed. I've written a gem ([Nitlink](https://github.com/alexpeattie/nitlink)) for just that - so let's install and load it:
+
+```shell
+gem install nitlink
+```
+
+```ruby
+require 'nitlink/response'
+```
 
 <br>
 
 ## 3. Registering with Let's Encrypt
 
-OK, we've laid the foundations - let's make our first actual request to the Let's Encrypt API! The first step is to register our client public key with Let's Encrypt. The endpoint we'll need is `https://acme-v01.api.letsencrypt.org/acme/new-reg`.
+OK, we've laid the foundations - let's make our first actual request to the Let's Encrypt API! The first step is to register our client public key with Let's Encrypt.
 
-Since all of our Let's Encrypt requests begin with `https://acme-v01.api.letsencrypt.org`, let's pull that into a constant - as well as being DRYer, it will make it easier to, for example, switch to LE's [staging server](https://acme-staging.api.letsencrypt.org/). (`CA` is an abbreviation of certificate authority)
-
-```ruby
-CA = 'https://acme-v01.api.letsencrypt.org'.freeze
-```
-
-Since we're sending the public key with every request (in the `header` property of our JSON), we don't need to include much in the actual registration payload. At a minimum, we'll need to specify the resource type - a `new-reg` in this case - and a link to the registration agreement (https://letsencrypt.org/documents/LE-SA-v1.0.1-July-27-2015.pdf at the time of writing) to acknowledge we've read & agreed to it:
+Since we're sending the public key with every request (in the `header` property of our JSON), we don't need to include much in the actual registration payload. At a minimum, we'll just need to specify the resource type: `new-reg` in this case.
 
 ```ruby
-signed_request(CA + '/acme/new-reg', {
+new_registration = signed_request(endpoints['new-reg'], {
   resource: 'new-reg',
-  agreement: 'https://letsencrypt.org/documents/LE-SA-v1.0.1-July-27-2015.pdf'
 })
 ```
 
-We can optionally provide contact details (highly recommended), this will allow us to recover our key in case we lose it. We'll need to include the protocols for the contact details we provide - e.g. `mailto:` for email addresses, `tel:` for phone numbers etc:
+We can optionally provide contact details (highly recommended), this will allow us to recover our key in case we lose it. We'll need to include the protocols for the contact details we provide - e.g. `mailto:` for email addresses, <strike>`tel:` for phone numbers</strike> (it turns out Let's Encrypt doesn't currently support this, see [here](https://github.com/letsencrypt/boulder/blob/release/docs/acme-divergences.md#section-62)).
 
 ```ruby
-signed_request('https://acme-v01.api.letsencrypt.org/acme/new-reg', {
+new_registration = signed_request(endpoints['new-reg'], {
   resource: 'new-reg',
-  contact: ['mailto:me@alexpeattie.com'],
-  agreement: 'https://letsencrypt.org/documents/LE-SA-v1.0.1-July-27-2015.pdf'
+  contact: ['mailto:me@alexpeattie.com']
 })
 ```
 
@@ -425,6 +478,7 @@ Sending the request should give us back a successful response:
 -> "HTTP/1.1 201 Created"
 -> "Content-Type: application/json"
 -> "Location: https://acme-v01.api.letsencrypt.org/acme/reg/12345"
+-> "Link: <https://acme-v01.api.letsencrypt.org/acme/new-authz>;rel=\"next\", <https://letsencrypt.org/documents/LE-SA-v1.1.1-August-1-2016.pdf>;rel=\"terms-of-service\""
 ...
 {
   "id": 12345,
@@ -434,7 +488,6 @@ Sending the request should give us back a successful response:
     "e": "AQAB"
   },
   "contact": ["mailto:me@alexpeattie.com"],
-  "agreement": "https://letsencrypt.org/documents/LE-SA-v1.0.1-July-27-2015.pdf",
   "initialIp": "101.222.66.199",
   "createdAt": "2015-12-12T12:07:23.755314388Z"
 }
@@ -469,6 +522,29 @@ If we try and register the same key again we'll get a 409 (Conflict) response:
 
 Don't worry, there are no side effects to attempting to re-register the same client key multiple times :relaxed:.
 
+#### Accepting the ToS
+
+Although we've successfully registered, Let's Encrypt won't let us do anything useful (like issue a certificate), until we accept their [Subscriber Agreement](https://letsencrypt.org/repository/#lets-encrypt-subscriber-agreement).
+
+To indicate our acceptance, we just need to make a request to the URI of our newly created user (returned in the response's `Location` header, in this case `https://acme-v01.api.letsencrypt.org/acme/reg/12345`) with the payload's `agreement` key set to the URI of the terms we're accepting. How do we know the URI of the terms? Eagle-eyed readers might have spotted above that it's returned as one of the response's `Link` headers:
+
+```
+Link: ... <https://letsencrypt.org/documents/LE-SA-v1.1.1-August-1-2016.pdf>;rel="terms-of-service"
+```
+
+We should also check that we got a 201 status (not a Conflict or malformed registration). Our final code for accepting the terms programatically looks like this:
+
+```ruby
+if new_registration.status == 201
+  signed_request(new_registration.headers['Location'], {
+    resource: 'reg',
+    agreement: new_registration.links.by_rel('terms-of-service').target
+  })
+end
+```
+
+(The `.links` method depends on the [Nitlink](https://github.com/alexpeattie/nitlink) gem, we'll get a `NoMethodError` if it's not installed). Notice that the resource type has changed, since we're not creating a new user, but modifying an existing one. Also, a real client should probably prompt the user to actually read the agreement - rather than just auto-accepting it :innocent:!
+
 <br>
 
 ## 4. Passing the challenge
@@ -480,12 +556,12 @@ The next step is to inform Let's Encrypt which domain or subdomain we to provisi
   - [a).](#a-asking-lets-encrypt-for-the-challenges) We ask LE for the challenge
   - [b).](#b-lets-encrypt-gives-us-our-challenges) LE gives us a challenge to prove we control the domain
   - [c)](#c-option-1-completing-the-http-01-challenge) or [d).](#d-option-2-completing-the-dns-01-challenge) We complete the HTTP- or DNS-based challenge, and notify LE that we're ready
-  - [d).](#e-telling-le-weve-completed-the-challenge) LE checks the challenge has been completed to it's satisfaction
-  - [e).](#f-wait-for-le-to-acknowledge-the-challenge-has-been-passed) We verify that LE is happy the challenge has been passed :trophy:
+  - [e).](#e-telling-le-weve-completed-the-challenge) LE checks the challenge has been completed to it's satisfaction
+  - [f).](#f-wait-for-le-to-acknowledge-the-challenge-has-been-passed) We verify that LE is happy the challenge has been passed :trophy:
 
 <br>
 
-Challenges are how we prove a sufficient level of control over the identifier (domain name) in question. We can do this either by serving a specific response when LE hits a specific URL (which generally means uploading a file to our web-server), provisioning a DNS record, or by leveraging [Server Name Indication](https://tools.ietf.org/html/rfc6066#section-3) extension of TLS to serve a special self-signed certificate.
+Challenges are how we prove a sufficient level of control over the identifier (domain name) in question. We can do this either by serving a specific response when LE hits a specific URL (which generally means uploading a file to our web-server), provisioning a DNS record, or by leveraging the [Server Name Indication](https://tools.ietf.org/html/rfc6066#section-3) extension of TLS to serve a special self-signed certificate.
 
 We'll cover the first two kinds of challenge: `http-01` and `dns-01` but not the third (`tls-sni-01`).
 
@@ -495,10 +571,10 @@ We'll cover the first two kinds of challenge: `http-01` and `dns-01` but not the
 
 Asking LE for our new challenge is just a case of making another request to the LE API - this time to create a `new-authz` (`authz` is short for **auth**ori**z**ation). 
 
-As you can probably guess, this means making a request to the `/acme/new-authz` endpoint with our `resource` option set to `new-authz`. Beyond that just need tell LE what identifier (domain name) we want to authorize:
+As you can probably guess, this means making a request to the `new-authz` endpoint with our `resource` option set to (you guessed it) `new-authz`. Beyond that just need tell LE what identifier (domain name) we want to authorize:
 
 ```ruby
-auth = signed_request(CA + '/acme/new-authz', {
+auth = signed_request(endpoints['new-authz'], {
   resource: 'new-authz',
   identifier: {
     type: 'dns',
@@ -507,7 +583,7 @@ auth = signed_request(CA + '/acme/new-authz', {
 })
 ```
 
-The ACME spec is designed to be flexible enough to authorize more than just domain names in the future - which is why we have to explicitly state we're authorizing a domain name with `type: 'dns'`. We could authorize the root domain with `value: 'alexpeattie.com'`.
+The ACME spec is designed to be flexible enough to authorize more than just domain names in the future - which is why we have to explicitly state we're authorizing a domain name with `type: 'dns'`. We could authorize the root domain with `value: 'alexpeattie.com'`. We can also provide a Punycode encoded IDN, see [Appendix 6](#appendix-6-idn-support).
 
 <br>
 
@@ -547,7 +623,7 @@ Let's Encrypt should send up back a nice meaty response like the below :meat_on_
 }
 ```
 
-Let's break this down. First our `"identifier"` is echoed back to us, along with it's `"status"` - right now it's `"pending"` which means we haven't proven to LE that we control the domain, we're aiming to change it to `"valid"`. Our challenge also has an expiry date - 1 week from now at the time of writing.
+Let's break this down. First our `"identifier"` is echoed back to us, along with its `"status"` - right now it's `"pending"` which means we haven't proven to LE that we control the domain; we're aiming to change it to `"valid"`. Our challenge also has an expiry date - 1 week from now at the time of writing.
 
 ```ruby
 http_challenge, dns_challenge = ['http-01', 'dns-01'].map do |challenge_type|
@@ -555,7 +631,7 @@ http_challenge, dns_challenge = ['http-01', 'dns-01'].map do |challenge_type|
 end
 ```
 
-The `"uri"` of the challenge will allow us to notify LE that we're ready to take the challenge, on to check if we've passed. The `"token"` is a unique, unguessable random value sent to us by LE that we'll need to **incorporate into our challenge response** to prove we control the domain.
+The `"uri"` of the challenge will allow us to notify LE that we're ready to take the challenge, on to check if we've passed. The `"token"` is a unique, unguessable, random value sent to us by LE that we'll need to **incorporate into our challenge response** to prove we control the domain.
 
 `"combinations"` is a another feature that's designed for the future. Right now we only have to pass 1 challenge to convince LE we control the domain. In the future we might see something like this:
 
@@ -651,7 +727,7 @@ Our simple nginx setup (see [Appendix 3]((#appendix-3-our-example-site-setup))) 
 
 #### d. Option 2: Completing the `dns-01` challenge
 
-The `dns-01` challenge was [introduced recently](https://twitter.com/letsencrypt/status/689919523164721152), allowing us to authorize our domain(s) by changing our DNS records. The key differences between the `http-01` challenge and the `dns-01` challenge are:
+The `dns-01` challenge was introduced at [the beginning of 2016](https://letsencrypt.org/upcoming-features/#acme-dns-challenge-support), allowing us to authorize our domain(s) by provisioning DNS records. The key differences between the `http-01` challenge and the `dns-01` challenge are:
 
 - We'll add a DNS [TXT record](https://en.wikipedia.org/wiki/TXT_record) rather than uploading a file
 - Rather than using "raw" key authorization as the record's contents, we'll use its (Base64 encoded) SHA-256 digest (see below)
@@ -661,7 +737,7 @@ There are lots of ways to add the required DNS record - most DNS services provid
 The key ingredients of a DNS record are its type, name and value/contents. The type of the record is `TXT`, which is designed for adding arbitrary text data to a DNS zone. The name of the record takes the format `_acme-challenge.subdomain.example.com`. The root domain name is appended to a record's name automatically, so we just need to provide the name as `_acme-challenge.subdomain` or just `_acme-challenge` if we're authorization the root domain.
 
 ```ruby
-record_name = "_acme-challenge.le"
+record_name = '_acme-challenge.le'
 ```
 
 To construct the contents of our record, we'll start by creating our "raw" challenge response in the same manner as in the `http-01` challenge:
@@ -681,16 +757,21 @@ dns_challenge_response = base64_le(hash_algo.digest raw_challenge_response)
 We'll use the [dnsimple-ruby gem](https://github.com/aetrion/dnsimple-ruby/tree/master-v1) to add our `TXT` record:
 
 ```shell
-$ gem install dnsimple
+gem install dnsimple -v 2.2
 ```
 
-We'll also need to get our API token from the DNSimple web interface. The code for adding our challenge response record is really simple:
+We'll also need to get our API token from the [DNSimple web interface](https://dnsimple.com/user). Then using the gem to add the TXT record, with the correct record name & content. We'll set a relatively low TTL (time to live) of 60 seconds, because we don't want our resolvers to cache the record for long - in case we need to redo the challenge, for example.
 
 ```ruby
 require 'dnsimple'
-# ..
+
 dnsimple = Dnsimple::Client.new(username: ENV['DNSIMPLE_USERNAME'], api_token: ENV['DNSIMPLE_TOKEN'])
-challenge_record = dnsimple.domains.create_record('alexpeattie.com', record_type: "TXT", name: record_name, content: dns_challenge_response)
+challenge_record = dnsimple.domains.create_record('alexpeattie.com', {
+  record_type: 'TXT',
+  name: record_name,
+  content: dns_challenge_response,
+  ttl: 60
+})
 ```
 
 Lastly, we'll use Ruby's [Resolv](http://ruby-doc.org/stdlib-2.3.0/libdoc/resolv/rdoc/Resolv.html) library (part of the std lib) to wait until the challenge record's been added:
@@ -714,7 +795,7 @@ Our request needs to include the field `keyAuthorization` with the key authoriza
 
 ```ruby
 signed_request(http_challenge['uri'], { # or dns_challenge['uri']
-  resource: "challenge",
+  resource: 'challenge',
   keyAuthorization: http_challenge_response # or dns_challenge_response,
 })
 ```
@@ -737,7 +818,7 @@ loop do
 end
 ```
 
-If we chose the DNS challenge, we should also clean up after ourselves by deleting the record (so our challenge attempt doesn't interfere with future challenge attempts, which will also be `TXT` records using the `_acme-challenge.le` name):
+If we chose the DNS challenge, we should also clean up after ourselves by deleting the record (so our challenge attempt doesn't interfere with future challenge attempts, which will also require `TXT` records using the `_acme-challenge.le` name):
 
 ```ruby
 dnsimple.domains.delete_record('alexpeattie.com', challenge_record.id)
@@ -769,11 +850,11 @@ csr.sign domain_key, hash_algo
 
 We need to set the subject of the CSR - in this case the common name (domain name) we want to secure. Then we sign our certificate with our (private) `domain_key`.
 
-LE needs us to send CSR in binary (.der) format - Base64 encoded of course. We'll be making a request for a `new-cert` to the `/acme/new-cert` endpoint:
+LE needs us to send CSR in binary (.der) format - Base64 encoded of course. We'll be making a request for a `new-cert`:
 
 ```ruby
-certificate_response = signed_request(CA + "/acme/new-cert", {
-  resource: "new-cert",
+certificate_response = signed_request(endpoints['new-cert'], {
+  resource: 'new-cert',
   csr: base64_le(csr.to_der),
 })
 ```
@@ -782,7 +863,7 @@ Let's Encrypt should respond with our brand new, DV certificate :tada: :tada:. I
 
 #### Formatting tweaks
 
-Certificates should be typically enclosed by a `-----BEGIN CERTIFICATE-----` header and `-----END CERTIFICATE-----` (RFC [here](http://tools.ietf.org/html/rfc7468#section-2)) with each line wrapped at 64 characters. We could either do that manually (e.g. see [tiny-acme's](https://github.com/diafygi/acme-tiny/blob/master/acme_tiny.py) implementation]) or let [`OpenSSL::X509::Certificate`](http://ruby-doc.org/stdlib-2.3.0/libdoc/openssl/rdoc/OpenSSL/X509/Certificate.html) take care of it:
+Certificates should be typically enclosed by a `-----BEGIN CERTIFICATE-----` header and `-----END CERTIFICATE-----` (RFC [here](http://tools.ietf.org/html/rfc7468#section-2)) with each line wrapped at 64 characters. We could either do that manually (e.g. see [tiny-acme's](https://github.com/diafygi/acme-tiny/blob/master/acme_tiny.py) implementation) or let [`OpenSSL::X509::Certificate`](http://ruby-doc.org/stdlib-2.3.0/libdoc/openssl/rdoc/OpenSSL/X509/Certificate.html) take care of it:
 
 ```ruby
 certificate = OpenSSL::X509::Certificate.new(certificate_response.body)
@@ -790,16 +871,22 @@ certificate = OpenSSL::X509::Certificate.new(certificate_response.body)
 
 #### Adding intermediates
 
-We also need to complete our trust chain, which means grabbing the LetsEncrypt cross-signed intermediate certificate [from here](https://letsencrypt.org/certs/lets-encrypt-x3-cross-signed.pem.txt). Some browsers will resolve an incomplete trust chain, but it's something we want to avoid. There's much more info on why we need to complete this step and the difference between the different intermediates LE offers in [Appendix 2: The trust chain & intermediate certificates](#appendix-2-the-trust-chain--intermediate-certificates).
+We also need to complete our trust chain, which means grabbing the LetsEncrypt cross-signed intermediate certificate (see <https://letsencrypt.org/certificates/>). Some browsers will resolve an incomplete trust chain, but it's something we want to avoid. There's much more info on why we need to complete this step and the difference between the different intermediates LE offers in [Appendix 2: The trust chain & intermediate certificates](#appendix-2-the-trust-chain--intermediate-certificates).
 
-Occasionally server software might want us to provide our intermediate certificates separately, but generally we'll bundle them together in a single file:
+Occasionally server software might want us to provide our intermediate certificates separately, but generally we'll bundle them together in a single file. Helpfully, LE provides a link to the latest intermediate certificate in the certificate response's `Link` header (it has the relation type `"up"`):
 
-```ruby
-intermediate = HTTParty.get('https://letsencrypt.org/certs/lets-encrypt-x3-cross-signed.pem').body
-IO.write('chained.pem', [certificate.to_pem, intermediate].join("\n"))
+```
+Link: </acme/issuer-cert>;rel="up"
 ```
 
-That's it - we're done with our client and have our valid certificate that will be accepted by all major browsers :white_check_mark:. That's also the end of the main part of the guide. If you're interesting in the logistics of installing the certificate, keep reading.
+```ruby
+intermediate = OpenSSL::X509::Certificate.new HTTParty.get(certificate_response.links.by_rel('up').target).body
+IO.write('chained.pem', [certificate.to_pem, intermediate.to_pem].join("\n"))
+```
+
+That's it - we're done with our client and have our certificate (valid for the next 90 days) that will be accepted by all major browsers :white_check_mark:! Completed authorizations are valid for 300 days, so we can our renew certificate without needing to take a challenge during that period.
+
+This is the end of the main part of the guide, if you're interesting in the logistics of installing the certificate, keep reading...
 
 <br>
 <hr>
@@ -828,7 +915,7 @@ server {
 }
 ```
 
-That's theoretically all we need, but we can improve on nginx's defaults for better security and performance. We'll use the settings recommended by <https://cipherli.st/> (click "Yes, give me a ciphersuite that works with legacy / old software." if you need to support older browsers) with Google's DNS server (8.8.8.8) as our `resolver` (recommended for [OSCP stapling](https://en.wikipedia.org/wiki/OCSP_stapling) on nginx):
+That's theoretically all we need, but we can improve on nginx's defaults for better security and performance. We'll use the settings recommended by <https://cipherli.st/> (click "Yes, give me a ciphersuite that works with legacy / old software." if you need to support older browsers) and a couple of extra headers recommended by [securityheaders.io](https://securityheaders.io/). We'll use Google's DNS server (8.8.8.8) as our `resolver` (recommended for [OSCP stapling](https://en.wikipedia.org/wiki/OCSP_stapling) on nginx):
 
 ```nginx
 ssl_protocols TLSv1 TLSv1.1 TLSv1.2;
@@ -841,10 +928,14 @@ ssl_stapling on;
 ssl_stapling_verify on;
 resolver 8.8.8.8;
 resolver_timeout 5s;
-# add_header Strict-Transport-Security "max-age=63072000; preload";
-add_header X-Frame-Options DENY;
-add_header X-Content-Type-Options nosniff;
+# add_header Strict-Transport-Security "max-age=63072000; preload" always;
+add_header X-Frame-Options DENY always;
+add_header X-Content-Type-Options nosniff always;
+add_header X-XSS-Protection "1; mode=block" always;
+add_header Content-Security-Policy "default-src https: data: 'unsafe-inline' 'unsafe-eval'" always;
 ```
+
+(Note: that the `Content-Security-Policy` header will prevent assets being loaded over HTTP - this is recommended, but could break some sites. Read more about CSPs [here](https://scotthelme.co.uk/content-security-policy-an-introduction/))
 
 We should keep the line enabling the `Strict-Transport-Security` header commented out until we're happy our HTTPS setup is working (as visitor's won't be able to access our non-HTTPS site once it's activated).
 
@@ -935,7 +1026,7 @@ http {
 
 #### Testing
 
-Lastly let's run some tests to ensure our certificates are correctly and securely installed. There are a few tools out there, [Qualys SSL Server Test](https://www.ssllabs.com/ssltest/) is the most widely used. Using our new certificate with the strict cipher list, with either an [ECDSA certificate](https://www.ssllabs.com/ssltest/analyze.html?d=leecdsa.alexpeattie.com) or a [standard certificate with a 4096-bit DH param](https://www.ssllabs.com/ssltest/analyze.html?d=le.alexpeattie.com) we'll net top marks with a perfect A+ score:
+Lastly let's run some tests to ensure our certificates are correctly and securely installed. There are a few tools out there, [Qualys SSL Server Test](https://www.ssllabs.com/ssltest/) is the most widely used. Using our new certificate with the strict cipher list, with either an ECDSA certificate or a standard certificate with a 4096-bit DH param we'll net top marks with a perfect A+ score:
 
 <p align='center'><img width="600" alt="A+ perfect score" src="https://cloud.githubusercontent.com/assets/636814/14065330/38b0c260-f41d-11e5-9e12-92b1b04adadf.png"></p>
 
@@ -943,10 +1034,18 @@ Using [cipherli.st](https://cipherli.st/)'s recommended ciphers, we'll score fra
 
 <p align='center'><img width="600" alt="A+ almost perfect score" src="https://cloud.githubusercontent.com/assets/636814/14065333/3e647d50-f41d-11e5-8784-de8ba408a033.png"></p>
 
+We also do well on securityheader.io test:
+
+<p align='center'><img width="600" alt="A grade on securityheaders.io" src="https://cloud.githubusercontent.com/assets/636814/20458341/193f8fc8-ae9a-11e6-8d18-05716f9c37ba.png"></p>
+
+As the report points out, we can harden our set up even further by implementing [HTTP Public Key Pinning](https://en.wikipedia.org/wiki/HTTP_Public_Key_Pinning) which could protect us if, for instance, Let's Encrypt itself was successfully attacked. However, this is currently considered quite advanced: as [Peter Eckersley](https://www.eff.org/about/staff/peter-eckersley) warns "HPKP pinning carries an inherent risk of bricking your site". But he does give some [detailed best practices](https://community.letsencrypt.org/t/hpkp-best-practices-if-you-choose-to-implement/4625) for the brave souls who do want to implement it.
+
 Some other useful testing tools:
 
 - [revocationcheck.com](https://certificate.revocationcheck.com/) - Useful for debugging OSCP
 - [testssl.sh](https://testssl.sh/) and [cipherscan](https://github.com/jvehent/cipherscan) - Command line TLS testing tools
+- [SSL Decoder](https://ssldecoder.org) - Open-source tool for checking SSL/TLS config - gives lots of info, but no score per se.
+- [High-Tech Bridge SSL Server Security Test](https://www.htbridge.com/ssl/) - A decent alternative to SSL Labs's tool. Advocates weaker ciphers because of HIPAA guidance though.
 
 <br>
 
@@ -994,8 +1093,6 @@ FF 44 | Chrome 48 | IE 11 | Safari 7.1 | iOS 8 (Safari) | Windows Phone 8.1 | An
 --- | --- | --- | --- | --- | --- | ---
 :no_entry: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :no_entry: | :no_entry: | :no_entry:
 
-Here's an example subdomain with only the certificate provided: <https://lecertonly.alexpeattie.com>.
-
 #### LE root certificate
 
 Let's Encrypt has it's own root certificate authority that's separate from Identrust, called ISRG Root X1. When this root CA is widely trusted, expect it to take Identrust's place in the trust chain. We can already use an [intermediate certificate issued by ISRG Root X1](https://letsencrypt.org/certs/letsencryptauthorityx1.pem.txt) - the problem is that, at the time of writing, ISRG Root X1 isn't trusted anywhere (to my knowledge).
@@ -1005,8 +1102,6 @@ If we try using the LE root-signed intermediate now, most browsers that support 
 FF 44 | Chrome 48 | IE 11 | Safari 7.1 | iOS 8 (Safari) | Windows Phone 8.1 | Android 6
 --- | --- | --- | --- | --- | --- | ---
 :no_entry: | :white_check_mark: | :white_check_mark: | :no_entry: | :no_entry: | :no_entry: | :no_entry:
-
-Here's an example subdomain using the Let's Encrypt root CA in the trust chain: <https://leroot.alexpeattie.com>.
 
 <br>
 
@@ -1089,13 +1184,15 @@ We should be ready to go, and the domain (e.g. <le.alexpeattie.com>) should serv
 
 <p align='center'><img src="https://cloud.githubusercontent.com/assets/636814/13723640/6181806e-e863-11e5-8889-838f1d333da7.png" alt="nginx welcome"></p>
 
+Once we've been issued our certificate, we can install it following [the steps in Appendix 1](#installation-with-nginx).
+
 <br>
 
 ## Appendix 4: Multiple subdomains
 
-Let's Encrypt can issue a single certificates which cover multiple, using the [SubjectAltName extension](https://en.wikipedia.org/wiki/SubjectAltName). At the time of writing, Let's Encrypt supports a maximum of 100 SANs per certificate (references: [1](https://community.letsencrypt.org/t/rate-limits-for-lets-encrypt/6769), [2](https://community.letsencrypt.org/t/subjectaltname-certificates/100/14), [3](https://community.letsencrypt.org/t/sans-per-cert-and-sni-for-hosting-service/5105/6)).
+Let's Encrypt can issue a single certificates which cover multiple, using the [SubjectAltName extension](https://en.wikipedia.org/wiki/SubjectAltName). At the time of writing, Let's Encrypt supports a maximum of 100 SANs per certificate (full LE rate limits are detailed [here](https://letsencrypt.org/docs/rate-limits/)).
 
-LE has quite conservative per-domain rate limits right now (5 certificates per domain per week) - so using SANs is crucial if you have lots of subdomains to secure*. [**LE doesn't currently support wildcard certificates**](https://community.letsencrypt.org/t/frequently-asked-questions-faq/26).
+LE has quite conservative per-domain rate limits right now (5 certificates per domain per week) - so using SANs is crucial if you have lots of subdomains to secure*. [**LE doesn't currently support wildcard certificates**](https://letsencrypt.org/docs/faq#will-lets-encrypt-issue-wildcard-certificates).
 
 A common use-case is having a single certificate cover the naked domain and `www.` prefix. We have to authorize both domains; LE doesn't take it for granted that if we control the root domain we also control the `www.` subdomain or vice-versa.
 
@@ -1103,7 +1200,7 @@ A common use-case is having a single certificate cover the naked domain and `www
 domains = %w(example.com www.example.com)
 
 domains.each do |domain|
-  auth = signed_request(CA + '/acme/new-authz', {
+  auth = signed_request(endpoints['new-authz'], {
     resource: 'new-authz',
     identifier: {
       type: 'dns',
@@ -1118,11 +1215,11 @@ end
 Once we've authorized all the subdomains we want to include in the certificate, we can modify our CSR to use the SAN extension (warning: not the prettiest or most readable code you'll ever see):
 
 ```ruby
-alt_names = domains.map { |domain| "DNS:#{domain}" }.join(", ")
+alt_names = domains.map { |domain| "DNS:#{domain}" }.join(', ')
 
-extension = OpenSSL::X509::ExtensionFactory.new.create_extension("subjectAltName", alt_names, false)
+extension = OpenSSL::X509::ExtensionFactory.new.create_extension('subjectAltName', alt_names, false)
 csr.add_attribute OpenSSL::X509::Attribute.new(
-  "extReq",
+  'extReq',
   OpenSSL::ASN1::Set.new(
     [OpenSSL::ASN1::Sequence.new([extension])]
   )
@@ -1131,19 +1228,19 @@ csr.add_attribute OpenSSL::X509::Attribute.new(
 
 That's all you need to get certificates to cover multiple host names, you can find the full code of the example in [`multiple_subdomains.rb`](https://github.com/alexpeattie/letsencrypt-fromscratch/blob/master/multiple_subdomains.rb).
 
-**If you're running a site that say assigns thousands of subdomains to you may be out of luck, unless you can get your domain added to [Public Suffix list](https://publicsuffix.org/) - which LE treats as a [special case](https://github.com/letsencrypt/boulder/issues/1374).*
+**If you're running a site that, say, assigns thousands of subdomains to end users you may be out of luck, unless you can get your domain added to [Public Suffix list](https://publicsuffix.org/) - which LE treats as a [special case](https://github.com/letsencrypt/boulder/issues/1374).*
 
 <br>
 
 ## Appendix 5: Key size
 
-Broadly-speaking key size means how hard a key is to crack. Longer keys offer more security, but their bigger size leads to a slightly slower TLS handshake.
+Broadly-speaking key size means how hard a key is to crack. Longer keys offer more security, but their bigger size leads to a somewhat slower TLS handshake.
 
 <p align='center'><a href='https://certsimple.com/blog/measuring-ssl-rsa-keys'><img src='https://certsimple.com/images/blog/measuring-rsa-keys/handshake-speed.png' alt='SSL handshake speed at different key sizes'></a></p>
 
 We don't have a very broad choice when it comes to choosing key size. 2048 bits has effectively been an [enforced minimum](https://www.cabforum.org/wp-content/uploads/Baseline_Requirements_V1.pdf) since the beginning of 2014; 4096 bits is the upper bound. 4096 bits is favored by some, but is far from the standard right now. It's anticipated that 2048-bit keys will be considered secure [until about 2030](http://www.keylength.com/en/4/).
 
-2048 is the default key size the [official Let's Encrypt client](https://github.com/letsencrypt/letsencrypt#current-features) uses. But you will need a 4096 bit key to score perfectly on the Key [SSL Labs' test](https://www.ssllabs.com/downloads/SSL_Server_Rating_Guide.pdf), and there are lively discussions advocating the LE default be raised to [4096](https://github.com/letsencrypt/letsencrypt/issues/489) or [3072](https://github.com/letsencrypt/letsencrypt/issues/2080). CertSimple did an [awesome, detailed rundown](https://certsimple.com/blog/measuring-ssl-rsa-keys) and basically concluded "it depends".
+2048 is the default key size for [cerbot](https://github.com/certbot/certbot#current-features). But you will need a 4096 bit key to score perfectly on the Key [SSL Labs' test](https://www.ssllabs.com/downloads/SSL_Server_Rating_Guide.pdf), and there are lively discussions advocating the LE default be raised to [4096](https://github.com/certbot/certbot/issues/489) or [3072](https://github.com/certbot/certbot/issues/2080). CertSimple did an [awesome, detailed rundown](https://certsimple.com/blog/measuring-ssl-rsa-keys) of the benefits of different key sizes, and basically concluded "it depends".
 
 We will need a key size of 4096 bits to get a perfect SSL Labs score. Not all cloud providers support key sizes about 2048 bits though, AWS CloudFront being a notable example. If you want or need to use a 2048-bit key, you can specify the key length like so:
 
@@ -1153,7 +1250,7 @@ domain_key = OpenSSL::PKey::RSA.new(2048)
 
 ### ECDSA keys
 
-If you really care about picking a good key, you might not want to use RSA at all. ECDSA ([Elliptic Curve Digital Signature Algorithm](https://en.wikipedia.org/wiki/Elliptic_Curve_Digital_Signature_Algorithm)) which gives a much better size vs. security trade-off. A 384 bit ECDSA is considered equivalent to a [7680 bit RSA key](http://crypto.stackexchange.com/questions/2482/how-strong-is-the-ecdsa-algorithm), and will also give a perfect SSL Labs score. More importantly, a number recently discovered SSL vulnerabilities (DROWN, Logjam, FREAK) target vulnerabilities specific not present in ECDSA certificates.
+If you really care about picking a good key, you might not want to use RSA at all. ECDSA ([Elliptic Curve Digital Signature Algorithm](https://en.wikipedia.org/wiki/Elliptic_Curve_Digital_Signature_Algorithm)) which gives a much better size vs. security trade-off. A 384 bit ECDSA is considered equivalent to a [7680 bit RSA key](http://crypto.stackexchange.com/questions/2482/how-strong-is-the-ecdsa-algorithm), and will also give a perfect SSL Labs score. More importantly, a number recently discovered SSL vulnerabilities (DROWN, Logjam, FREAK) target RSA-specific vulnerabilities which are not present in ECDSA certificates.
 
 We'll have to a bit more work to create an ECDSA CSR (see [this blog post I wrote](https://alexpeattie.com/blog/signing-a-csr-with-ecdsa-in-ruby) for a more detailed explanation):
 
@@ -1173,6 +1270,21 @@ csr.sign domain_key, OpenSSL::Digest::SHA256.new
 ECDSA is pretty well supported: Windows Vista and up, OS X 10.9, Android 3 and iOS 7*
 
 **Source: [CertSimple: What web developers should know about SSL but probably don't](https://certsimple.com/blog/obsolete-cipher-suite-and-things-web-developers-should-know-about-ssl)*
+
+<br>
+
+## Appendix 6: IDN support
+
+Since October 2016 Let's Encrypt has [supported Internationalized Domain Names](https://letsencrypt.org/upcoming-features#idn-support) (IDNs). When providing an IDN as the `identifier`'s `value` in our `new-authz` request, and when setting the subject of the CSR, we need to use the [Punycode](https://en.wikipedia.org/wiki/Punycode) representation of the IDN. For example, `müller.de` would become `xn--mller-kva.de`.
+
+You can do the conversion with an online service like [Punycoder](https://www.punycoder.com/) or with a gem like [SimpleIDN](https://github.com/mmriis/simpleidn):
+
+```ruby
+require 'simpleidn'
+
+domain = SimpleIDN.to_unicode('müller.de')
+=> 'xn--mller-kva.de'
+```
 
 <br>
 
@@ -1205,3 +1317,30 @@ ECDSA is pretty well supported: Windows Vista and up, OS X 10.9, Android 3 and i
 
 - Key - [Pixabay](https://pixabay.com/en/skeleton-key-key-old-lock-vintage-303535/)
 - Nonce - [chibird](http://chibird.com/post/27665010997/sometimes-youre-really-reminded-how-precious-life)
+
+<br>
+
+## Author
+
+<img src='https://avatars3.githubusercontent.com/u/636814?v=3&s=100'>
+
+Alex Peattie / [alexpeattie.com](https://alexpeattie.com/) / [@alexpeattie](https://twitter.com/alexpeattie) 
+
+<br>
+
+## Changelog
+
+#### Version 1.1 - Nov 19 2016
+* Use the directory and response headers, rather than hardcoding URIs (closes [#1](https://github.com/alexpeattie/letsencrypt-fromscratch/issues/1))
+* Add Appendix 6 about newly supported Internationalized Domain Names
+* Change reference to official Let's Encrypt client → certbot
+* Specify a TTL for DNS challenge record
+* Add note about certificate and authorization validity periods
+* Consistently prefer single quotes in all Ruby code
+* Remove example domains for the various certificate types
+* Added a couple more tools to the Testing section
+* Add Changelog & Author section
+* Harden example nginx config with additional security headers
+
+#### Version 1.0 - Mar 29 2016
+* Initial release

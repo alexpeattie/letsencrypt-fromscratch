@@ -1,11 +1,11 @@
-%w(openssl base64 json httparty dnsimple tempfile net/scp resolv).each { |lib| require lib }
+%w(openssl base64 json httparty dnsimple tempfile net/scp resolv nitlink/response).each { |lib| require lib }
 
 HTTParty::Basement.default_options.update(debug_output: $stdout)
 
 # Ruby EC key implementation monkey-patch (see https://alexpeattie.com/blog/signing-a-csr-with-ecdsa-in-ruby)
 OpenSSL::PKey::EC.send(:alias_method, :private?, :private_key?)
 
-CA = 'https://acme-v01.api.letsencrypt.org'.freeze
+DIRECTORY_URI = 'https://acme-v01.api.letsencrypt.org/directory'.freeze
 domains = %w(le1.example.com le2.example.com)
 root_domain, email = 'example.com', 'me@example.com'
 preferred_challenge = 'http-01' # or 'dns-01', 
@@ -39,7 +39,11 @@ def hash_algo
 end
 
 def nonce
-  HTTParty.head(CA + '/directory')["Replay-Nonce"]
+  HTTParty.head(DIRECTORY_URI)['Replay-Nonce']
+end
+
+def endpoints
+  @endpoints ||= HTTParty.get(DIRECTORY_URI).to_h
 end
 
 def signed_request(url, payload)
@@ -63,14 +67,21 @@ def upload(local_path, remote_path)
   Net::SCP.upload!(server_ip, 'root', local_path, remote_path)
 end
 
-signed_request(CA + '/acme/new-reg', {
+new_registration = signed_request(endpoints['new-reg'], {
   resource: 'new-reg',
-  contact: ['mailto:' + email],
-  agreement: 'https://letsencrypt.org/documents/LE-SA-v1.0.1-July-27-2015.pdf'
+  contact: ['mailto:' + email]
 })
 
+# accept Subscriber Agreement
+if new_registration.code == 201
+  signed_request(new_registration.headers['Location'], {
+    resource: 'reg',
+    agreement: new_registration.links.by_rel('terms-of-service').target
+  })
+end
+
 domains.each do |domain|
-  auth = signed_request(CA + '/acme/new-authz', {
+  auth = signed_request(endpoints['new-authz'], {
     resource: 'new-authz',
     identifier: {
       type: 'dns',
@@ -99,7 +110,7 @@ domains.each do |domain|
     record_contents = base64_le(hash_algo.digest challenge_response)
 
     dnsimple = Dnsimple::Client.new(username: ENV['DNSIMPLE_USERNAME'], api_token: ENV['DNSIMPLE_TOKEN'])
-    challenge_record = dnsimple.domains.create_record(root_domain, record_type: "TXT", name: record_name, content: record_contents)
+    challenge_record = dnsimple.domains.create_record(root_domain, record_type: 'TXT', name: record_name, content: record_contents, ttl: 60)
 
     loop do
       resolved_record = Resolv::DNS.open { |r| r.getresources("#{record_name}.#{root_domain}", Resolv::DNS::Resource::IN::TXT) }[0]
@@ -110,7 +121,7 @@ domains.each do |domain|
   end
 
   signed_request(challenge['uri'], {
-    resource: "challenge",
+    resource: 'challenge',
     keyAuthorization: challenge_response
   })
 
@@ -144,22 +155,21 @@ csr.public_key = case certificate_type
 end
 alt_names = domains.map { |domain| "DNS:#{domain}" }.join(", ")
 
-extension = OpenSSL::X509::ExtensionFactory.new.create_extension("subjectAltName", alt_names, false)
+extension = OpenSSL::X509::ExtensionFactory.new.create_extension('subjectAltName', alt_names, false)
 csr.add_attribute OpenSSL::X509::Attribute.new(
-  "extReq",
+  'extReq',
   OpenSSL::ASN1::Set.new(
     [OpenSSL::ASN1::Sequence.new([extension])]
   )
 )
 csr.sign domain_key, hash_algo
 
-certificate_response = signed_request(CA + "/acme/new-cert", {
-  resource: "new-cert",
+certificate_response = signed_request(endpoints['new-cert'], {
+  resource: 'new-cert',
   csr: base64_le(csr.to_der),
 })
-
 certificate = OpenSSL::X509::Certificate.new(certificate_response.body)
-intermediate = HTTParty.get('https://letsencrypt.org/certs/lets-encrypt-x3-cross-signed.pem').body
+intermediate = OpenSSL::X509::Certificate.new HTTParty.get(certificate_response.links.by_rel('up').target).body
 
 IO.write(domain_filename + '-cert.pem', certificate.to_pem)
 IO.write(domain_filename + '-chained.pem', [certificate.to_pem, intermediate].join("\n"))
