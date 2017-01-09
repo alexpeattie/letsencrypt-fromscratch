@@ -103,7 +103,7 @@ if preferred_challenge == 'http-01'
 end
 
 if preferred_challenge == 'dns-01'
-  record_name = '_acme-challenge.' + domain.sub(root_domain, '').chomp('.')
+  record_name = ('_acme-challenge.' + domain.sub(root_domain, '')).chomp('.')
   challenge, challenge_response = dns_challenge, [dns_challenge['token'], thumbprint].join('.')
   record_contents = base64_le(hash_algo.digest challenge_response)
 

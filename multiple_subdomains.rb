@@ -80,6 +80,8 @@ if new_registration.code == 201
   })
 end
 
+dnsimple = Dnsimple::Client.new(username: ENV['DNSIMPLE_USERNAME'], api_token: ENV['DNSIMPLE_TOKEN'])
+
 domains.each do |domain|
   auth = signed_request(endpoints['new-authz'], {
     resource: 'new-authz',
@@ -105,11 +107,10 @@ domains.each do |domain|
   end
 
   if preferred_challenge == 'dns-01'
-    record_name = "_acme-challenge." + domain.sub(root_domain, '').chomp('.')
+    record_name = ('_acme-challenge.' + domain.sub(root_domain, '')).chomp('.')
     challenge, challenge_response = dns_challenge, [dns_challenge['token'], thumbprint].join('.')
     record_contents = base64_le(hash_algo.digest challenge_response)
 
-    dnsimple = Dnsimple::Client.new(username: ENV['DNSIMPLE_USERNAME'], api_token: ENV['DNSIMPLE_TOKEN'])
     challenge_record = dnsimple.domains.create_record(root_domain, record_type: 'TXT', name: record_name, content: record_contents, ttl: 60)
 
     loop do
