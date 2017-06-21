@@ -255,7 +255,7 @@ We have our plaintext header - which contains the required components of our pub
 
 The protected header contains one additional element which our unprotected header doesn't - a [cryptographic nonce](https://en.wikipedia.org/wiki/Cryptographic_nonce). The linked article goes into lots of details, but a nonce is basically a one-time use code which we must attach to our request. It means if an attacker somehow sniffs out a request we made, and makes a carbon-copy duplicate request, the attackers attempt will fail (because the nonce has already been used).
 
-<p align='center'><img src='http://45.media.tumblr.com/tumblr_m7hl1rtHfv1qc4uvwo1_500.gif' width='350'></p>
+<p align='center'><img src='https://user-images.githubusercontent.com/636814/27398616-34eb14c0-56b2-11e7-8582-aee497307088.gif' width='350'></p>
 
 Let's Encrypt provides us a nonce in the headers of every response it gives us - so getting a nonce is just a case of requesting any Let's Encrypt API endpoint, and grabbing it from the `Replay-Nonce` header.
 
