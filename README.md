@@ -50,7 +50,9 @@ I heavily referenced Daniel Roesler's absolutely awesome [acme-tiny](https://git
   * [Issuing the certificate :tada:](#5-issuing-the-certificate-tada)
     * [Formatting tweaks](#formatting-tweaks)
     * [Adding intermediates](#adding-intermediates)
-  <hr>
+
+<hr>
+
   * [Appendix 1: Installing and testing the certificate](#appendix-1-installing-and-testing-the-certificate)
     * [Installation (with nginx)](#installation-with-nginx)
     * [Testing](#testing)
