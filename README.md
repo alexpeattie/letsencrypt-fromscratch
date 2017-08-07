@@ -1288,6 +1288,241 @@ domain = SimpleIDN.to_unicode('müller.de')
 
 <br>
 
+## Appendix 7: Using EC client keys
+
+As well as support ECDSA-based certificates (see above), since 2016 LetsEncrypt has supported ECDSA for client (A.K.A account) keys. We'll have to make a few non-trivial modifications to our client to get EC client keys working though.
+
+First, we'll need an EC keypair:
+
+```bash
+openssl ecparam -genkey -name secp256k1 -noout -out ec-private.pem
+openssl ec -in ec-private.pem -pubout -out ec-public.pem
+```
+
+(Alternatively you can grab an Boulder's test EC key [here](https://github.com/letsencrypt/boulder/blob/f21a7e5ad2078563a7084f7cf0ebe80c9c0bc92b/test/ct-key.pem)
+
+Then, we'll need to change our `client_key` method to load our EC private key. 
+
+```ruby
+OpenSSL::PKey::EC.new IO.read(client_key_path)
+```
+
+Simple enough so far, unfortunately, things begin to get a bit complicated. For starters, we previously only had to worry about a single signing algorithm: RSA + SHA256 (you might remember we refer to it as `'RS256'` in our `header` method). We'll always use the SHA256 digest algorithm, regardless of the length of our RSA key.
+
+With EC keys though, we'll use a different hashing algorithm depending on the curve used/key length (different curves = different key lengths):
+
+| Algorithm     | Curve name    | Key length (bits) | Hashing algorithm  |
+| ------------- | ------------- | ----------------- | ------------------ |
+| ES256         | P-256         | 256               | SHA-256            |
+| ES384         | P-384         | 384               | SHA-384            |
+| ES512         | P-521         | 521               | SHA-512            |
+
+Eagle-eyed readers might spot something odd about the ES512: we have a key 521 bits long, but the associated digest size is 512 bits. It's not a typo, and it does make things a bit more awkward; we can't assume that key size = digest size. We can get the key's bit length/curve using `client_key.group.degree`, so let's write a method to get the associated digest size:
+
+```ruby
+def digest_size
+  { 256: 256, 384: 384, 521: 512 }[client_key.group.degree]
+end
+```
+
+With this in place we can modify our `hash_algo` method to dynamically fetch the correct `Digest` class to match up with our EC key:
+
+```ruby
+def hash_algo
+  OpenSSL::Digest.const_get("SHA#{digest_size}").new
+end
+```
+
+Next, we need to modify our `header`. We'll ditching be ditching our `"e"` and `"n"` keys (they're specific to RSA keys), and we'll need to add a `"crv"` key to indicate the EC key's curve name. As we can see from the table above, for the curves we're concerned with, it's just the key's bit length prefixed with `"P-"`. Lastly, `alg` is now `"ES"` + `digest_size`, and `kty` (key type) is `"EC"`:
+
+```ruby
+@header ||= {
+  alg: "ES#{ digest_size }",
+  jwk: {
+    crv: "P-#{ client_key.group.degree }",
+    kty: 'EC'
+  }
+}
+```
+
+Before we go any further, let's add a helper method which splits a string into pieces of a certain length (this will come in handy later):
+
+```ruby
+def split_into_pieces(str, opts = {})
+  str.chars.each_slice(opts[:piece_size]).map(&:join)
+end
+
+# example:
+split_into_pieces("abcdef", piece_size: 2)
+# => ['ab', 'cd', 'ef']
+```
+
+Next, we have to add the public part of the key into the header. Running `client_key.public_key.inspect` we see something like:
+
+```ruby
+"#<OpenSSL::PKey::EC::Point:0x007fad4209d728 #...
+```
+
+The public part of an EC key is called a "public key curve point", and it's literally a point in 2-dimensional space. We need to provide the `x` and `y` coordinates of this point, again this is a little bit tricky. First, let's convert our public key to a hexidecimal string:
+
+```ruby
+pub_key_hex = client_key.public_key.to_bn.to_s(16)
+# => "04170BD2669BB4EA2DDFAD293F9B3F47703F671139F8C1FDE643ECC3B46DB519AA4BCAD1FB47566BC9C0730D5F6EE9C5FDA8D2DCF419F90C0BA6CFB669D80B80F9"
+```
+
+Andreas M. Antonopoulos, gives a good explanation of what we're looking at:
+
+> As we saw previously, the public key is a point on the elliptic curve consisting of a pair of coordinates (x,y). It is usually presented with the prefix `04` followed by two 256-bit numbers, one for the x coordinate of the point, the other for the y coordinate. The prefix `04` is used to distinguish uncompressed public keys from compressed public keys that begin with a `02` or a `03`.
+
+We don't really care about the `04` prefix - once we've got rid of that, we'll need to split our long hexidecimal sequence in half, to extract the x and y values.
+
+First, let's use our `split_into_pieces` to break it up into the individual octets:
+
+```ruby
+pub_key_octets = split_into_pieces(pub_key_hex, piece_size: 2)
+```
+
+Next we'll drop our first octet (`04`), and split our sequence in half:
+
+```ruby
+pub_key_octets.shift # drop the first octet (which just indicates key is uncompressed)
+x_octets, y_octets = pub_key_octets.each_slice(pub_key_octets.size / 2).to_a
+```
+
+Lastly, we'll convert our hex values to binary data using the pack method (see [To Hex and Back (With Ruby)](http://anthonylewis.com/2011/02/09/to-hex-and-back-with-ruby/) for a detailed explanation):
+
+```ruby
+x = x_octets.map(&:hex).pack('c*')
+y = y_octets.map(&:hex).pack('c*')
+```
+
+We can shorten our code a bit by converting to binary first, and reusing our `split_into_pieces` method:
+
+```ruby
+coords_binary_data = pub_key_octets.map(&:hex).pack('c*')
+x, y = split_into_pieces(coords_binary_data, piece_size: coords_binary_data.size / 2)
+```
+
+Lastly, we'll need to Base64 encode our `x` and `y` values before sending them over the wire:
+
+```ruby
+jwk: {
+  crv: "P-#{ client_key.group.degree }",
+  x: base64_le(x),
+  kty: 'EC',
+  y: base64_le(y)
+}
+```
+
+To recap, our `header` method now looks like this:
+
+```ruby
+def header
+  @header ||= begin
+    pub_key_hex = client_key.public_key.to_bn.to_s(16)
+    pub_key_octets = split_into_pieces(pub_key_hex, piece_size: 2)
+
+    pub_key_octets.shift # drop the first octet (which just indicates key is uncompressed)
+    coords_binary_data = pub_key_octets.map(&:hex).pack('c*')
+    x, y = split_into_pieces(coords_binary_data, piece_size: coords_binary_data.length / 2)
+
+    {
+      alg: "ES#{ digest_size }",
+      jwk: {
+        crv: "P-#{ client_key.group.degree }",
+        x: base64_le(x),
+        kty: 'EC',
+        y: base64_le(y)
+      }
+    }
+  end
+end
+```
+
+Worn out yet :sweat_smile:? There's one last step: we have to update how our signature is generated. When we sign a value using RSA, the signature is a single value σ, which is really just one long integer (see https://en.wikipedia.org/wiki/Digital_signature#How_they_work). But DSA (which we use with EC keys) returns *a pair* of integers, typically denoted *r* and *s* (see https://en.wikipedia.org/wiki/Digital_Signature_Algorithm#Signing), so we'll need to make a few modifications to allow for this. First, `OpenSSL::PKey::EC` equivalent method to `#sign` is `#dsa_sign_asn1`:
+
+```ruby
+signature = client_key.dsa_sign_asn1 hash_algo.digest([request[:protected], request[:payload]].join('.'))
+```
+
+Then we need to extract the value of (*r*, *s*) as binary strings. The signature is ASN.1 encoded, so we'll first decode it and convert it to an array (of two elements, i.e. *r* and *s*):
+
+```ruby
+decoded_signature = OpenSSL::ASN1.decode(signature).to_a
+```
+
+Then we'll map the values of `r` and `s` as binary strings:
+
+```ruby
+r, s = decoded_signature.map { |v| v.value.to_s(2) }
+```
+
+Finally, we set the `"signature"` field in our JSON request to `r` and `s` concatenated together, and Base64 encoded:
+
+```ruby
+request[:signature]  = base64_le(r + s)
+```
+
+All the changes we needed to make are collected below (also see [ec_client.rb](https://github.com/alexpeattie/letsencrypt-fromscratch/blob/master/ec_client.rb)):
+
+```ruby
+def client_key
+  @client_key ||= begin
+    client_key_path = File.expand_path('~/Desktop/ec.key')
+    OpenSSL::PKey::EC.new IO.read(client_key_path)
+  end
+end
+
+def split_into_pieces(str, opts = {})
+  str.chars.each_slice(opts[:piece_size]).map(&:join)
+end
+
+def header
+  @header ||= begin
+    combined_coordinates = client_key.public_key.to_bn.to_s(16)
+    coord_octets = split_into_pieces(combined_coordinates, piece_size: 2)
+
+    coord_octets.shift # drop the first octet (which just indicates key is uncompressed)
+    coords_bin = coord_octets.map(&:hex).pack('c*')
+    x, y = split_into_pieces(coords_bin, piece_size: coords_bin.length / 2)
+
+    {
+      alg: "ES#{ client_key.group.degree }",
+      jwk: {
+        crv: "P-#{ client_key.group.degree }",
+        x: base64_le(x),
+        kty: 'EC',
+        y: base64_le(y)
+      }
+    }
+  end
+end
+
+def hash_algo
+  bit_size = client_key.group.degree
+  bit_size = 512 if bit_size == 521
+
+  OpenSSL::Digest.const_get("SHA#{bit_size}").new
+end
+
+def signed_request(url, payload)
+  request = {
+    payload: base64_le(payload),
+    header: header,
+    protected: base64_le(header.merge(nonce: nonce))
+  }
+  signature = client_key.dsa_sign_asn1 hash_algo.digest([request[:protected], request[:payload]].join('.'))
+  decoded_signature = OpenSSL::ASN1.decode(signature).to_a
+
+  r, s = decoded_signature.map { |v| v.value.to_s(2) }
+
+  request[:signature]  = base64_le(r + s)
+  HTTParty.post(url, body: JSON.dump(request))
+end
+```
+
+<br>
+
 ## Further reading
 
 #### TLS/SSL in general
@@ -1329,6 +1564,9 @@ Alex Peattie / [alexpeattie.com](https://alexpeattie.com/) / [@alexpeattie](http
 <br>
 
 ## Changelog
+
+#### Version 1.2 - Aug 7 2017
+* Use the directory and response headers, rather than hardcoding URIs (closes [#1](https://github.com/alexpeattie/letsencrypt-fromscratch/issues/1))
 
 #### Version 1.1 - Nov 19 2016
 * Use the directory and response headers, rather than hardcoding URIs (closes [#1](https://github.com/alexpeattie/letsencrypt-fromscratch/issues/1))
