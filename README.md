@@ -5,7 +5,7 @@
 
 This is a (pretty detailed) how-to on building a simple ACME client from scratch, able to issue real certificates from [Let's Encrypt](https://letsencrypt.org). I've skipped things like error handling, object orientedness, tests - but not much tweaking would be needed for the client to be production-ready.
 
-The code for the finished client is in [client.rb](https://github.com/alexpeattie/letsencrypt-fromscratch/blob/master/client.rb).
+The code for the finished client is in [`client.rb`](https://github.com/alexpeattie/letsencrypt-fromscratch/blob/master/client.rb).
 
 #### About the guide
 
@@ -64,6 +64,8 @@ I heavily referenced Daniel Roesler's absolutely awesome [acme-tiny](https://git
   * [Appendix 5: Key size](#appendix-5-key-size)
     * [ECDSA keys](#ecdsa-keys)
   * [Appendix 6: IDN support](#appendix-6-idn-support)
+  * [Appendix 7: Using EC client keys](#appendix-7-using-ec-client-keys)
+  * [Appendix 8: Certificate expiry and revocation](#appendix-8-certificate-expiry-and-revocation)
   * [Further reading](#further-reading)
     * [TLS/SSL in general](#tlsssl-in-general)
     * [Let's Encrypt](#lets-encrypt)
@@ -403,11 +405,14 @@ The `/directory` endpoint that we use to fetch our nonce serves another purpose:
 
 ```json
 {
-  "key-change": "https://acme-staging.api.letsencrypt.org/acme/key-change",
-  "new-authz": "https://acme-staging.api.letsencrypt.org/acme/new-authz",
-  "new-cert": "https://acme-staging.api.letsencrypt.org/acme/new-cert",
-  "new-reg": "https://acme-staging.api.letsencrypt.org/acme/new-reg",
-  "revoke-cert": "https://acme-staging.api.letsencrypt.org/acme/revoke-cert"
+  "key-change": "https://acme-v01.api.letsencrypt.org/acme/key-change",
+  "meta": {
+    "terms-of-service": "https://letsencrypt.org/documents/LE-SA-v1.1.1-August-1-2016.pdf"
+  },
+  "new-authz": "https://acme-v01.api.letsencrypt.org/acme/new-authz",
+  "new-cert": "https://acme-v01.api.letsencrypt.org/acme/new-cert",
+  "new-reg": "https://acme-v01.api.letsencrypt.org/acme/new-reg",
+  "revoke-cert": "https://acme-v01.api.letsencrypt.org/acme/revoke-cert"
 }
 ```
 
@@ -533,6 +538,10 @@ To indicate our acceptance, we just need to make a request to the URI of our new
 ```
 Link: ... <https://letsencrypt.org/documents/LE-SA-v1.1.1-August-1-2016.pdf>;rel="terms-of-service"
 ```
+
+**Update August 2017:** The URL of the current terms are now also available through the directory, and thus via our `endpoints` method, specifically `endpoints['meta']['terms-of-service']`.
+
+<br>
 
 We should also check that we got a 201 status (not a Conflict or malformed registration). Our final code for accepting the terms programatically looks like this:
 
@@ -1071,7 +1080,7 @@ In the future Let's Encrypt hopes to have its own trusted root CA: [ISRG Root X1
 
 'Issued' is a bit of oversimplification here - in fact, Identrust just cross-signed LE's CA certificate, but it achieves the same end-result: trust in all major browsers/OSes.
 
-So our complete trust chain should include our certificate, the [certificate of Let's Encrypt's intermediate CA](https://letsencrypt.org/certs/lets-encrypt-x3-cross-signed.pem.txt) (Let’s Encrypt Authority X3), and optionally the Identrust CA's [trusted root certificate](https://raw.githubusercontent.com/EFForg/https-everywhere/master/cert-validity/mozilla/builtin-certs/DST_Root_CA_X3.crt). In reality there's no point making the client download the root certificate - it needs to already be in the trust store anywhere. As RFC 2246 says:
+So our complete trust chain should include our certificate, the [certificate of Let's Encrypt's intermediate CA](https://letsencrypt.org/certs/lets-encrypt-x3-cross-signed.pem.txt) (Let’s Encrypt Authority X3), and optionally the Identrust CA's [trusted root certificate](https://raw.githubusercontent.com/EFForg/https-everywhere/master/cert-validity/mozilla/builtin-certs/DST_Root_CA_X3.crt). In reality there's no point making the client download the root certificate - it needs to already be in the trust store anywhere. As [RFC 2246](https://www.ietf.org/rfc/rfc2246.txt) says:
 
 > Because certificate validation requires that root keys be distributed independently, the self-signed certificate which specifies the root certificate authority may optionally be omitted from the chain, under the assumption that the remote end must already possess it in order to validate it in any case.
 
@@ -1194,7 +1203,7 @@ Once we've been issued our certificate, we can install it following [the steps i
 
 Let's Encrypt can issue a single certificates which cover multiple, using the [SubjectAltName extension](https://en.wikipedia.org/wiki/SubjectAltName). At the time of writing, Let's Encrypt supports a maximum of 100 SANs per certificate (full LE rate limits are detailed [here](https://letsencrypt.org/docs/rate-limits/)).
 
-LE has quite conservative per-domain rate limits right now (5 certificates per domain per week) - so using SANs is crucial if you have lots of subdomains to secure*. [**LE doesn't currently support wildcard certificates**](https://letsencrypt.org/docs/faq#will-lets-encrypt-issue-wildcard-certificates).
+LE has quite conservative per-domain rate limits right now (20 distinct certificates per domain per week) - so using SANs is crucial if you have lots of subdomains to secure*.
 
 A common use-case is having a single certificate cover the naked domain and `www.` prefix. We have to authorize both domains; LE doesn't take it for granted that if we control the root domain we also control the `www.` subdomain or vice-versa.
 
@@ -1230,7 +1239,7 @@ csr.add_attribute OpenSSL::X509::Attribute.new(
 
 That's all you need to get certificates to cover multiple host names, you can find the full code of the example in [`multiple_subdomains.rb`](https://github.com/alexpeattie/letsencrypt-fromscratch/blob/master/multiple_subdomains.rb).
 
-**If you're running a site that, say, assigns thousands of subdomains to end users you may be out of luck, unless you can get your domain added to [Public Suffix list](https://publicsuffix.org/) - which LE treats as a [special case](https://github.com/letsencrypt/boulder/issues/1374).*
+**If you're running a site that, say, assigns thousands of subdomains to end users, you may be out of luck since "you can [only] issue certificates containing up to 2,000 unique subdomains per week" ([source](https://letsencrypt.org/docs/rate-limits/)). The only current work-around is to get your domain added to [Public Suffix list](https://publicsuffix.org/) - which LE treats as a [special case](https://github.com/letsencrypt/boulder/issues/1374). Additionally, wildcard certificates will [launch in January 2018](https://letsencrypt.org/2017/07/06/wildcard-certificates-coming-jan-2018.html).*
 
 <br>
 
@@ -1244,7 +1253,7 @@ We don't have a very broad choice when it comes to choosing key size. 2048 bits 
 
 2048 is the default key size for [cerbot](https://github.com/certbot/certbot#current-features). But you will need a 4096 bit key to score perfectly on the Key [SSL Labs' test](https://www.ssllabs.com/downloads/SSL_Server_Rating_Guide.pdf), and there are lively discussions advocating the LE default be raised to [4096](https://github.com/certbot/certbot/issues/489) or [3072](https://github.com/certbot/certbot/issues/2080). CertSimple did an [awesome, detailed rundown](https://certsimple.com/blog/measuring-ssl-rsa-keys) of the benefits of different key sizes, and basically concluded "it depends".
 
-We will need a key size of 4096 bits to get a perfect SSL Labs score. Not all cloud providers support key sizes about 2048 bits though, AWS CloudFront being a notable example. If you want or need to use a 2048-bit key, you can specify the key length like so:
+We will need a key size of 4096 bits to get a perfect SSL Labs score. Not all cloud providers support key sizes above 2048 bits though, AWS CloudFront being a notable example. If you want or need to use a 2048-bit key, you can specify the key length like so:
 
 ```ruby
 domain_key = OpenSSL::PKey::RSA.new(2048)
@@ -1441,13 +1450,13 @@ def header
 end
 ```
 
-Worn out yet :sweat_smile:? There's one last step: we have to update how our signature is generated. When we sign a value using RSA, the signature is a single value σ, which is really just one long integer (see https://en.wikipedia.org/wiki/Digital_signature#How_they_work). But DSA (which we use with EC keys) returns *a pair* of integers, typically denoted *r* and *s* (see https://en.wikipedia.org/wiki/Digital_Signature_Algorithm#Signing), so we'll need to make a few modifications to allow for this. First, `OpenSSL::PKey::EC` equivalent method to `#sign` is `#dsa_sign_asn1`:
+Worn out yet :sweat_smile:? There's one last step: we have to update how our signature is generated. When we sign a value using RSA, the signature is a single value `σ`, which is really just one long integer (see [Digital signature](https://en.wikipedia.org/wiki/Digital_signature#How_they_work) on Wikipedia). But DSA (which we use with EC keys) returns *a pair* of integers, typically denoted `r` and `s` (see Wikipedia's [DSA](https://en.wikipedia.org/wiki/Digital_Signature_Algorithm#Signing) article), so we'll need to make a few modifications to allow for this. First, `OpenSSL::PKey::EC` equivalent method to `#sign` is `#dsa_sign_asn1`:
 
 ```ruby
 signature = client_key.dsa_sign_asn1 hash_algo.digest([request[:protected], request[:payload]].join('.'))
 ```
 
-Then we need to extract the value of (*r*, *s*) as binary strings. The signature is ASN.1 encoded, so we'll first decode it and convert it to an array (of two elements, i.e. *r* and *s*):
+Then we need to extract the value of (`r`, `s`) as binary strings. The signature is ASN.1 encoded, so we'll first decode it and convert it to an array (of two elements, i.e. `r` and `s`):
 
 ```ruby
 decoded_signature = OpenSSL::ASN1.decode(signature).to_a
@@ -1465,12 +1474,12 @@ Finally, we set the `"signature"` field in our JSON request to `r` and `s` conca
 request[:signature]  = base64_le(r + s)
 ```
 
-All the changes we needed to make are collected below (also see [ec_client.rb](https://github.com/alexpeattie/letsencrypt-fromscratch/blob/master/ec_client.rb)):
+All the changes we needed to make are collected below (also see [`ec_client.rb`](https://github.com/alexpeattie/letsencrypt-fromscratch/blob/master/ec_client.rb)):
 
 ```ruby
 def client_key
   @client_key ||= begin
-    client_key_path = File.expand_path('~/Desktop/ec.key')
+    client_key_path = File.expand_path('~/Desktop/ec-private.pem')
     OpenSSL::PKey::EC.new IO.read(client_key_path)
   end
 end
@@ -1525,6 +1534,98 @@ end
 
 <br>
 
+## Appendix 8: Certificate expiry and revocation
+
+A fun factoid: Let's Encrypt certificates are technically only valid of 89 days and 23 hours, not for a whole 90 days. This is because LE [backdates certificates by 1 hour](https://github.com/letsencrypt/boulder/blob/3431acfb9236de32c1da2e8eb626b6667e33872c/test/config-next/ca.json#L54) to ensure the certificates can be validated immediately by clients whose clocks might be slightly out. Therefore a certificate issued on August 1st 12:34 will expire October 30th 11:34.
+
+The validity period for Lets Encrypt certificates are relatively short. Per the CA/Browser Forum [Baseline Requirements](https://cabforum.org/wp-content/uploads/CA-Browser-Forum-BR-1.4.8.pdf), Section 6.3.2:
+
+> Subscriber Certificates issued after 1 March 2018 MUST have a Validity Period no greater than 825 days.
+> Subscriber Certificates issued after 1 July 2016 but prior to 1 March 2018 MUST have a Validity Period no greater than 39 months.
+
+Accordingly, most commercial providers offer certificates with 1, 2 or 3 year validity periods (see GlobalSign's article on [Maximum Certificate Validity](https://support.globalsign.com/customer/en/portal/articles/1464693-maximum-certificate-validity)). LE states the primary reasons for the shorter lifetime are:
+
+- Shorter lifetimes decrease the compromise window in situations like [Heartbleed](http://heartbleed.com/)
+- Offering free certificates with a shorter lifetime provides encouragement for operators to automate issuance.
+- Let's Encrypt's total capacity is bound by its OCSP signing capacity, and LE is required to sign OCSP responses for each certificate until it expires. Shorter expiry period means less overhead for certificates that were issued and then discarded, which in turn means higher total issuance capacity.
+
+*(Source: [Pros and cons of 90-day certificate lifetimes](https://community.letsencrypt.org/t/pros-and-cons-of-90-day-certificate-lifetimes/4621))*
+
+Let's Encrypt will send email reminders to the address(es) provided in the `contacts` field of your `new-reg` payload, at the following times:
+
+- 20 days before the date of expiry
+- 10 days before the date of expiry
+- 1 day before the expiry.
+
+Additionally, various tools exist to monitor your certificates and alert you about upcoming expiries, including hosted services like [LetsMonitor](https://letsmonitor.org/) and [Keychest](https://keychest.net/) or standalone applications like [certinel](https://github.com/drtoful/certinel). Dan Cvrcek posted a [fairly extensive list](https://community.letsencrypt.org/t/monitoring-the-state-of-certificates-cont/37764) on the LE forums.
+
+<p align='center'><img src='https://letsencrypt.org/images/howitworks_revocation.png' width='500' alt='Requesting revocation of a certificate for example.com'></p>
+
+If the private keys of our certificates get compromised, we need to disable certificates before they expire. In these cases we can explicitly revoke certificates; as the diagram above shows, to do this we make a signed request to LE which includes the certificate to be revoked. LE then propagates the revocation to certificate revocation lists and OCSP responders, which in turns should ensure browsers won't accept requests signed by the revoked certificate (especially if OCSP stapling is enabled, see [Appendix 1](#appendix-1-installing-and-testing-the-certificate)).
+
+There are a number of different ways to perform a revocation, depending on which keys you have access to.
+
+#### Scenario 1: You have access to the private key for the certificate
+
+Revocation requests are different from other ACME request in that they can be signed either with an account key pair or the key pair in the certificate. If we still have access to this key, we can simply load it in as our client key:
+
+```ruby
+client_key_path = File.expand_path('~/Desktop/domain.key')
+OpenSSL::PKey::RSA.new IO.read(client_key_path)
+```
+
+For our payload, we'll need the certificate in question. Since we have our private key locally, we'll assume the certificate is locally available too (though see [Scenario 2](#scenario-2-you-dont-have-access-to-the-private-key-for-the-certificate-but-you-still-have-access-to-the-client-key-for-the-account-which-issued-the-certificate) for alternative approaches):
+
+```ruby
+cert_path = File.expand_path('~/Desktop/chained.pem')
+certificate = OpenSSL::X509::Certificate.new IO.read(cert_path)
+```
+
+To revoke our certificate, we'll need to send a Base64 encoded version of the certificate in DER format:
+
+```ruby
+new_registration = signed_request(endpoints['new-reg'], {
+  resource: 'revoke-cert',
+  certificate: base64_le(certificate.to_der)
+})
+```
+
+#### Scenario 2: You don't have access to the private key for the certificate, but you still have access to the client key for the account which issued the certificate
+
+If the authorizations are still valid for the certificate's domain (i.e. the certificate is less that 30 days old, as of [April 2017](https://community.letsencrypt.org/t/expiry-of-valid-authorizations-reduced-from-60-days-to-30-days/32959)), you can revoke the certificate as above, but using your existing account key:
+
+```ruby
+client_key_path = File.expand_path('~/.ssh/id_rsa')
+
+# ...
+
+new_registration = signed_request(endpoints['new-reg'], {
+  resource: 'revoke-cert',
+  certificate: base64_le(certificate.to_der)
+})
+```
+
+Note that you still need to provide the certificate in DER format, even if you're not providing the certificate's corresponding private key. You can dynamically fetch the certificate like so:
+
+```ruby
+uri, certificate = URI.parse("https://example.com"), nil
+http = Net::HTTP.new(uri.host, uri.port)
+http.use_ssl = true
+http.verify_mode = OpenSSL::SSL::VERIFY_PEER
+http.start { |h| certificate = h.peer_cert }
+```
+
+Note that if it's been 30 days since you issued the certificate, the account key won't help you, and you're in an equivalent position to Scenario 3.
+
+#### Scenario 3: You don't have access to the client key for the account which issued the certificate, or the private key for the domain, but you still control the certificate's domain(s)
+
+Per LetsEncrypt's [article on revocation](https://letsencrypt.org/docs/revoking/):
+
+> If someone issued a certificate after compromising your host or your DNS, you’ll want to revoke that certificate once you regain control. In order to revoke the certificate, Let’s Encrypt will need to ensure that you control the domain names in that certificate (otherwise people could revoke each other’s certificates without permission)! To validate this control, Let’s Encrypt uses the same methods it uses to validate control for issuance: you can put a value in a DNS TXT record, put a file on an HTTP server, or offer a special TLS certificate.
+
+In other words, you'll need to create a new account, pass the challenges for the domain(s) of the compromised certificate (see [Section 4](#4-passing-the-challenge)), then revoke the certificate as in Scenario 2, but using the account key for your newly created and authorized account.
+<br>
+
 ## Further reading
 
 #### TLS/SSL in general
@@ -1568,7 +1669,10 @@ Alex Peattie / [alexpeattie.com](https://alexpeattie.com/) / [@alexpeattie](http
 ## Changelog
 
 #### Version 1.2 - Aug 7 2017
-* Use the directory and response headers, rather than hardcoding URIs (closes [#1](https://github.com/alexpeattie/letsencrypt-fromscratch/issues/1))
+* Add Appendix 7 explaining how to use EC client keys
+* Add Appendix 8 about certificate expiry and revocation
+* Add note about terms of service URL now being available via the directory
+* Update Appendix 4 with up-to-date rate limits, note about forthcoming wildcard certs
 
 #### Version 1.1 - Nov 19 2016
 * Use the directory and response headers, rather than hardcoding URIs (closes [#1](https://github.com/alexpeattie/letsencrypt-fromscratch/issues/1))
@@ -1584,3 +1688,7 @@ Alex Peattie / [alexpeattie.com](https://alexpeattie.com/) / [@alexpeattie](http
 
 #### Version 1.0 - Mar 29 2016
 * Initial release
+
+<hr>
+
+[:top: Back to top](#building-a-lets-encrypt-client-from-scratch)

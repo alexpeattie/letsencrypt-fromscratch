@@ -17,24 +17,41 @@ end
 
 def client_key
   @client_key ||= begin
-    client_key_path = File.expand_path('~/.ssh/id_rsa')
-    OpenSSL::PKey::RSA.new IO.read(client_key_path)
+    client_key_path = File.expand_path('~/Desktop/ec-private.pem')
+    OpenSSL::PKey::EC.new IO.read(client_key_path)
   end
 end
 
+def split_into_pieces(str, opts = {})
+  str.chars.each_slice(opts[:piece_size]).map(&:join)
+end
+
 def header
-  @header ||= {
-    alg: 'RS256',
-    jwk: {
-      e: base64_le(client_key.e.to_s(2)),
-      kty: 'RSA',
-      n: base64_le(client_key.n.to_s(2))
+  @header ||= begin
+    combined_coordinates = client_key.public_key.to_bn.to_s(16)
+    coord_octets = split_into_pieces(combined_coordinates, piece_size: 2)
+
+    coord_octets.shift # drop the first octet (which just indicates key is uncompressed)
+    coords_bin = coord_octets.map(&:hex).pack('c*')
+    x, y = split_into_pieces(coords_bin, piece_size: coords_bin.length / 2)
+
+    {
+      alg: "ES#{ client_key.group.degree }",
+      jwk: {
+        crv: "P-#{ client_key.group.degree }",
+        x: base64_le(x),
+        kty: 'EC',
+        y: base64_le(y)
+      }
     }
-  }
+  end
 end
 
 def hash_algo
-  OpenSSL::Digest::SHA256.new
+  bit_size = client_key.group.degree
+  bit_size = 512 if bit_size == 521
+
+  OpenSSL::Digest.const_get("SHA#{bit_size}").new
 end
 
 def nonce
@@ -51,8 +68,12 @@ def signed_request(url, payload)
     header: header,
     protected: base64_le(header.merge(nonce: nonce))
   }
-  request[:signature] = base64_le client_key.sign(hash_algo, [request[:protected], request[:payload]].join('.'))
+  signature = client_key.dsa_sign_asn1 hash_algo.digest([request[:protected], request[:payload]].join('.'))
+  decoded_signature = OpenSSL::ASN1.decode(signature).to_a
 
+  r, s = decoded_signature.map { |v| v.value.to_s(2) }
+
+  request[:signature]  = base64_le(r + s)
   HTTParty.post(url, body: JSON.dump(request))
 end
 
