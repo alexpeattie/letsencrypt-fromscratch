@@ -87,7 +87,7 @@ It's fine to use existing SSH keys, if you've already got them generated and the
 openssl rsa -in ~/.ssh/id_rsa -text -noout | head -n 1
 ```
 
-If you see or `Private-Key: (2048 bit)` or `Private-Key: (4096 bit)` you're good to go (if you're interested, there's more info about key size in [Appendix 5](#appendix-5-key-size)). Otherwise, we'll need to generate them - [Github has great instructions on how](https://help.github.com/articles/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent/). Let's begin by loading our key-pair into Ruby:
+If you see `Private-Key: (2048 bit)` or `Private-Key: (4096 bit)` you're good to go (if you're interested, there's more info about key size in [Appendix 5](#appendix-5-key-size)). Otherwise, we'll need to generate them - [Github has great instructions on how](https://help.github.com/articles/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent/). Let's begin by loading our key-pair into Ruby:
 
 ```ruby
 require 'openssl'
