@@ -895,7 +895,7 @@ intermediate = OpenSSL::X509::Certificate.new HTTParty.get(certificate_response.
 IO.write('chained.pem', [certificate.to_pem, intermediate.to_pem].join("\n"))
 ```
 
-That's it - we're done with our client and have our certificate (valid for the next 90 days) that will be accepted by all major browsers :white_check_mark:! Completed authorizations are valid for 300 days, so we can our renew certificate without needing to take a challenge during that period.
+That's it - we're done with our client and have our certificate (valid for the next 90 days) that will be accepted by all major browsers :white_check_mark:! Completed authorizations are valid for 300 days, so we can renew our certificate without needing to take a challenge during that period.
 
 This is the end of the main part of the guide, if you're interesting in the logistics of installing the certificate, keep reading...
 
