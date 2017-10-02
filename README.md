@@ -785,7 +785,7 @@ challenge_record = dnsimple.domains.create_record('alexpeattie.com', {
 })
 ```
 
-**NOTE** DNSimple is growing and at the time this guide created we're using DNSimple API v1. The `DNSIMPLE_USERNAME` is the email address linked to your DNSimple account and `DNSIMPLE_TOKEN` is API v1 token.
+(Note: DNSimple is growing and at the time this guide created we're using DNSimple API v1. The `DNSIMPLE_USERNAME` is the email address linked to your DNSimple account and `DNSIMPLE_TOKEN` is API v1 token.)
 
 Lastly, we'll use Ruby's [Resolv](http://ruby-doc.org/stdlib-2.3.0/libdoc/resolv/rdoc/Resolv.html) library (part of the std lib) to wait until the challenge record's been added:
 
