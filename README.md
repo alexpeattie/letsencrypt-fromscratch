@@ -19,7 +19,7 @@ The guide and client code are all [MIT licensed](https://github.com/alexpeattie/
 
 #### Technology
 
-This example code is written in Ruby (I used 2.3), and is largely dependency free (apart from OpenSSL). We use [HTTParty](https://github.com/jnunemaker/httparty) and [Nitlink](https://github.com/alexpeattie/nitlink) for more convenient API requests - but you could use vanilla `Net::HTTP` if you're a masochist :see_no_evil:. And we'll use additional gems to upload files and provision DNS records.
+This example code is written in Ruby (I used 2.3), and is largely dependency free (apart from OpenSSL). We use [HTTParty](https://github.com/jnunemaker/httparty) for more convenient API requests - but you could use vanilla `Net::HTTP` if you're a masochist :see_no_evil:. And we'll use additional gems to upload files and provision DNS records.
 
 The choice of language is meant to be a background factor - the guide is (hopefully) illustrative & understandable even if you're not familiar with/interested in Ruby.
 
@@ -108,7 +108,7 @@ client_key = OpenSSL::PKey::RSA.new(IO.read(client_key_path), 'letmein')
 
 The first, and probably hardest step, is constructing requests in the very particular format that Let's Encrypt demands. It's important to remember though, that in principle, the Let's Encrypt API is the same as any other API.
 
-For example, using the [Github API](https://developer.github.com/v3/) I can programatically create an issue, by making a `POST` request to the target repo's `/issues` endpoint with a JSON payload that includes the issue title and body:
+For example, using the <a href='https://developer.github.com/v3/' name='github-example'>Github API</a> I can programatically create an issue, by making a `POST` request to the target repo's `/issues` endpoint with a JSON payload that includes the issue title and body:
 
 ```json
 POST https://api.github.com/repos/alexpeattie/letsencrypt-fromscratch/issues
@@ -122,30 +122,48 @@ POST https://api.github.com/repos/alexpeattie/letsencrypt-fromscratch/issues
 The key difference with the Let's Encrypt API is we can't just send our JSON payload in a nice human-readable format as above, because we'll be signing it with our client private key to prove our identity. This is what a request to the Let's Encrypt API looks like:
 
 ```json
-POST https://acme-v01.api.letsencrypt.org/acme/new-cert
+POST https://acme-staging-v02.api.letsencrypt.org/acme/new-acct
 
 {
   "payload": "eyJyZXNvdXJjZSI6Im5ldy1jZXJ0IiwiY3NyIjoiTUlJRVhEQ0NBa1FDQVFBd0Z6RVZNQk1HQTFVRUF3d01abWxzWlhNdWNHVm5MbU52TUlJQ0lqQU5CZ2txaGtpRzl3MEJBUUVGQUFPQ0FnOEFNSUlDQ2dLQ0FnRUE2ZG9JNWdlc1VWZVV2czJXN1h3LV9JcDg2eFl3ZnV0MDVNWE1aYWpWa3lMS1lhNHpjdGs3Y2hIN1ZuQWsxVF9uTXNaM0hYTlQ3X0J0R1hkYnlJR0FqRXhpR3F4cm5LejJqSS1JTVRNU1RKSklmRVhDUVJqUkx2U0c2S3VYbXk2aGhkS3BLMkpRam10OTh0QmxUY0NxbFFKNGRZWV9oMVFCTmYwZmUwN3p4T24zUXlaeU9Da05GMkdGQmZoSWZqTGRuVXJCbDBSejlTSUhLZkZTWW13SldKMTBBLWJiNVdRM2FkUWlNWF83amhYWHVBdUdDZnRBZ2h1UGdPWjlTalJXYVBpalNkOUxERWk1Y2pCalFsN1o4a0ZKTnV0VndSQlNFTDFIQVVNWE9ndkxKLW5mVjV4Tm15VHdmYTRsdXV4WEtsVnpJZFlmZDRUZWV1NHhwUTAxb29vQ0dLRUVCZ3VMQzdQLUtjemg4MUxXaTZtcExIRVZwOTNzWi1QZDZvNlROMFlabVZjaUwtNlJpTGRXY2hUeEtkbjNvTS1UYmRBTUVxb3VmTU5JYkh6LUVHREFxUkhGOUxCTU43bFlPcWJ0dWFmcjduN1EtVmQxN19KTGIxcnpONVFmclZvd2o4cUJpUHlRUndXbDhqN2hiLVpCR1NpMlJNb0V3LWNURG1KYjIweWUwQXZrWHhqVmxqbTN1aGpWVWRHTEtTQ0dfM1I4V0VuWEI3akRTV3Zpd0NEdDFKLWtPSW5EOEVUcjFvVDJKWWJ5N0FsaS12R25jdjJRdlhSb010RG9MN3F0MmkzSHNNZzhORjFDSHVhRUQ3RXdiTEMwRTRpWnZfcUw2WW45endqMVZ2bUZtbjA3T1ItanVOYkFnUXAtb01XR1lORDFKMnRpSW5QV0RtVUNBd0VBQWFBQU1BMEdDU3FHU0liM0RRRUJDd1VBQTRJQ0FRREdPdjUxc1hlUWNSLVhYMmUtbDZfSEt1WjNfVTdKbTJmNWtMMWJvbkpwOUM0UExacVNZMzNDZE5FbE1BcEVRczFzLTVhWEJCemRYWWE1X05hTFB2cm5fRm5mb2d1cnJHOXV6cU1vT0QtMjMtUnd5QkNLZFpNQ3gyVmd0YWNFU3RiZ2RLamNMRnRNRVE4YnR1NHIxMXVKQWlrblRIQnk4V3ZmaHREVS1Da0FkT2FYZV8zMktKSVV4Z05LSzhiYnRVUGlFc21jd3VqUGVzUkprWUh1QWVKc2JFQkY5ekVZNjlCazZiZVZKUUpxRjR4VjhYYmJheGZSX1N6TG5NWnJZNFhoNDNXbGRPN1UzZm9BZHYtLWk3eTlDbDUxaTJRV1RZMHFGcGVmd19nUU93SFFWMW9BRWJ0OWwyYkgyNGEtZ2NKUE9RNEhTdTBEV0ZHaFdSVkVuMUJsQ01XMkxGQnp2elpzMGdIaFhnQ1psVnNGcE1nYndJMThBLTA4UjZvS2FRWC1fM2tDb0FIaXcxQ1pdanaVQ1ZVOVRZNXNUMVlnZXBJVzBkT0VHYXY3YUJMXzNCbk9HVzVlMlZ2LXN5aGVSZS1ORzhXTEZiOHRyc2hMYTRPOVVjS3h3Nzl0MjFGaEhUYXhIblJLcDhFR3p3M2ZoZElMUW42YVlkb0k4Wm9faGJJaUE0cEhoMXlCbGpLU2Q3Zk1xTzkzX3JxV2Y4NzRfd2Q4N3RhcDFmb1pyZ1dYMVU5Wm9ZUnhFZ0FQOVN1cUdrcTJVUl9ucU9CQl9XaVBPM2ZGcFc3cTB6UEp1QUtBNWZIdDdFRG1HUldkTWNGXzM0SDdNenZPQk4tckI2S3VZTUtzWXpkS1ZEMDhwUnhUVVhKc3Nrb2t2MVF3aGNmNklzdEFtMDJ6bjhfWHBRIn0",
-  "header": {
-    "alg": "RS256",
-    "jwk": {
-      "e": "AQAB",
-      "kty": "RSA",
-      "n": "xVZG_h6B314tV_UNG-KUA_wldRuRjXvdcLwwtzOSBBjA1aGa-wabVUjazf2DrPWHlhiFlfom0sV0JgR2Ak5Ydlr4OOTqWCQ6m-ABnl71DvUs-u8eQwcLPsp-ccmRW3vYGuXoSP7-TEM9MSfAI-jeJ9vXeyDUGQDTD1FcBcZh886tR6LwyHBUbE0aD7I5I6pKr5kn24utnXcQ0LNoTOwjycexwzb-kGYHKfHdK5Chx1XLUkZIw7SYqePTchcBRsn6WOYLZ-orT4G58CRNbqpWa6qeRDijCOguUZfaJPuZLJl8ULIhtim0k1Y2e-X8tCNn-qacraicW6mPdlRcBUXAzQ"
-    }
-  },
   "protected": "eyJhbGciOiJSUzI1NiIsImp3ayI6eyJlIjoiQVFBQiIsImt0eTI6IlJTQSIsIm4iOiJ4VlpHX2g2QjMxNHRWX1VORy1LVUFfd2xkUnVSalh2ZGNMd3d0ek9TQkJqQTFhR2Etd2FiVlVqYXpmMkRyUFdIbGhpRmxmb20wc1YwSmdSMkFrNVlkbHI0T09UcVdDUTZtLTRMbmw3MUR2VXMtdThlUXdjTFBzcC1jY21SVzN2WUd1WG9TUDctVEVNOU1TZkFJLWplSjl2WGV5RFVHUURURDFGY0JjWmg4ODZ0UjZMd3lIQlViRTBhRDdJNUk2cEtyNWtuMjR1dG5YY1EwTE5vVE93anljZAv3emIta0dZSEtmSGRLNUNoeDFYTFVrWkl3N1NZcWVQVGNoY0JSc242V09ZTFotb3JUNEc1OENTTmJxcFdhNnFlUkRpakPNZ3VVWmZhSlB1WkxKbDhVTElodGltMGsxWTJlLVg4dENObi1xYWNyYWljVzZtUGRsUmNCVVhBelEifSwibm9uY2UiOiJidGY3SFpROHlvVERGNVphWjdaSnVGR05tOWR2cWhyNmdWVHR0NHZYbmFvIn0",
   "signature": "Mo1ZVEkT_QjsH4Yy98tTm3JEpsccnriVn5L18yjN2O1ea57V3apkDkkMb_3wleJ0YJskSuNrvtftJOC_-OqeT1_qbq4AjugEqMPle5I7VUAzshnh1DL7YiAgds5Fm06VtCuWUns5owF2MtVmjKMJHdHc9a_9-jilQsFWrTHEZgTt_ebBHazFpiEVcqoNCxhho-XxWZaHlvDOncJXUnqG0SWIa0OeM5Gm80jlPRlQoE5Wp6RqQvn1Fsb3NpzMUEQwD-s9JCvB4U2tQdpGLM5ynfbFwlgyS1AgKiQ4FLEftc55Yo9yOo0bXEugM7aDZS7-_TjqFD_N7r0IJHPp8fXrCQ"
 }
 ```
 
-This is what's called a JWS (JSON Web Signature), specifically a ["JWS Using Flattened JWS JSON Serialization"](https://tools.ietf.org/html/rfc7515#appendix-A.7) from [RFC 7515](https://tools.ietf.org/html/rfc7515). Scary stuff eh :ghost:? Don't worry, we'll break down the anatomy of this strange looking request in the sections below.
+This is what's called a JWS (JSON Web Signature), specifically a variant of ["JWS Using Flattened JWS JSON Serialization"](https://tools.ietf.org/html/rfc7515#appendix-A.7) from [RFC 7515](https://tools.ietf.org/html/rfc7515). Scary stuff eh :ghost:?
+
+Don't worry, it's not really as intimidating as it looks. In this section we'll explain the anatomy of these curious looking requests, and write code to make them ourselves.
 
 <br>
 
-#### a. Base64 all the things
+#### a. The anatomy of a Let's Encrypt request
 
-One problem we'll run into is that when we sign our payload with our key, we might not get ASCII out, even if we're only putting ASCII in. We can see this for ourselves:
+Let's look at our request again, this time, I'll truncate the encoded data a bit for readability:
+
+```json
+POST https://acme-staging-v02.api.letsencrypt.org/acme/new-acct
+
+{
+  "payload": "eyJyZXNvdXJjZSI6Im5ldy1jZ...",
+  "protected": "eyJhbGciOiJSUzI1NiIsImp3a...",
+  "signature": "Mo1ZVEkT_QjsH4Yy98tTm3JEp..."
+}
+```
+
+Notice that we have three keys in the JSON we're `POST`ing to Let's Encrypt: `"payload"`, `"protected"` and `"signature"`. All requests we send to LE will contain only these keys, which each serve a distinct role.
+
+**`"payload"`**, as the name, implies is where the 'meat' of the request goes. Remember our [Github example](#user-content-github-example), where we provided the title and body of the issue we were creating? This is the kind of that goes into payload. If we're registering an account, the payload will contain our registration details (email, name, contact details etc.). If we're ordering a certificate, the payload will contain the domain names we're looking to secure.
+
+**`"protected"`** is short for 'integrity-protected header'; this is where we include some important metadata. First we confirm the **URL** we're requesting and include a **nonce** (see part d) - this makes it difficult for an attacker to try and redirect or replay our requests. We also include details about our **public key** - either by sending the important parts of the key in a special format, or a unique ID for the key which LE keeps on file. LE will then use the public key to verify the...
+
+**`"signature"`** - this simply takes the previous two parts of the request (`"payload"` and `"protected"`), and cryptographically signs them. This means that if an attacker was to intercept our attack, change an element of the payload or header, then forward on the request, LE will recognize the tampering and reject the request.
+
+<br>
+
+#### b. Base64 all the things
+
+One problem we'll run into is that when we sign our payload and header with our key, we might not get ASCII out, even if we're only putting ASCII in. We can see this for ourselves:
 
 ```ruby
 puts client_key.sign OpenSSL::Digest::SHA256.new, 'Hello world'
@@ -186,24 +204,26 @@ def base64_le(data)
 end
 ```
 
+A quick sidenote: Base64 is just encoding, not encryption. It's not meant to keep the details of our request secret, it's really just to avoid headaches with character encodings.
+
 <br>
 
-#### b. Payload
+#### c. Payload
 
-The **payload** is the simplest part of our request. It's just JSON that we'll Base64 encode using our method above:
+The **payload** will differ for each request - it's where we put any information that's important for the request we're making (e.g. our email address when we register a new account). The good news is that we simple apply our Base64 encoding and we're done:
 
 ```ruby
-base64_le '{"resource":"new-reg"}'
- #=> "eyJyZXNvdXJjZSI6ICJuZXctcmVnIn0"
+base64_le '{"contact":["mailto:me@alexpeattie.com"]}'
+ #=> "eyJjb250YWN0IjpbIm1haWx0bzptZUBhbGV4cGVhdHRpZS5jb20iXX0"
  ```
 
-This a totally valid payload that we can send to Let's Encrypt. Obviously it'll be more convienient not to have to construct JSON strings by hand - so let's load in the [JSON library](http://ruby-doc.org/stdlib-2.3.0/libdoc/json/rdoc/JSON.html) (again part of the Ruby standard lib):
+This a totally valid payload that we can send to Let's Encrypt. Obviously it'll be more convenient not to have to construct JSON strings by hand - so let's load in the [JSON library](http://ruby-doc.org/stdlib-2.3.0/libdoc/json/rdoc/JSON.html) (again part of the Ruby standard lib):
 
 ```ruby
 require 'json'
 
-base64_le JSON.dump(resource: 'new-reg')
- #=> "eyJyZXNvdXJjZSI6ICJuZXctcmVnIn0"
+base64_le JSON.dump(contact: ['mailto:me@alexpeattie.com'])
+ #=> "eyJjb250YWN0IjpbIm1haWx0bzptZUBhbGV4cGVhdHRpZS5jb20iXX0"
 ```
 
 For further convenience, we can make our Base64 helper method smarter. If the data we pass in is an array or hash, it should JSONify the data before encoding it:
@@ -215,53 +235,100 @@ def base64_le(data)
 end
 ```
 
-That's all we need for our payload :smile:! As well as providing information about the request we want to make, it will form one half of the data we'll be signing.
+That's all we need for our payload :smile:! As well as providing information about the request we want to make, the payload will form one half of the data we'll be signing.
 
 <br>
 
-#### c. Header
+#### d. Protected header
 
-We'll need to give Let's Encrypt two things for it to validate the authenticity of the request: our public key, and the cryptographic hashing algorithm we're using to generate the signature. This info will go in our **header**.
+We'll need to give Let's Encrypt two things for it to validate the authenticity of the request: our public key, and the cryptographic hashing algorithm we're using to generate the signature.
 
-The static parts of our header are as follows:
+The protected header is where we include metadata which allows Let's Encrypt to validate the authenticity of our request, and makes the request more difficult forge, replay or redirect.
 
-```ruby
-header = {
-  alg: 'RS256',
-  jwk: {
-    kty: 'RSA',
-  }
-}
-```
-
-`alg` corresponds with the hashing algorithm we want to use - in this case SHA-256 (or more technically [RSA PKCS#1 v1.5 signature with SHA-256](https://tools.ietf.org/html/draft-ietf-jose-json-web-algorithms-14#section-3.1), but we don't really have to worry about that here). `kty` means key type - our keys are RSA keys. `jwk` stands for JSON web key - a standard for sharing keys via JSON.
-
-The parts of the key we're interested in are the public key exponent (e) and the modulus (n). Helpfully our `client_key` has corresponding methods (`client_key.e` and `client_key.n`) - the only additionally steps we need to take are converting them to binary strings with `to_s(2)` ([documented here](http://ruby-doc.org/stdlib-2.3.0/libdoc/openssl/rdoc/OpenSSL/BN.html#to_s-method)), then (you guessed it), Base64 encoding them. Let's also create a `header` convenience method:
+In the next section, we'll cryptographically sign our payload and header, to protect our request from tampering. The first thing we'll need to do is give LE a heads-up as to the particular signing algorithm we're planning to use. We'll use the RSA with SHA-256 algorithm (or more formally, [RSA PKCS#1 v1.5 signature with SHA-256](https://tools.ietf.org/html/draft-ietf-jose-json-web-algorithms-14#section-3.1)) - we specify this choice with the `alg` key:
 
 ```ruby
-def header
-  {
-    alg: 'RS256',
-    jwk: {
-      e: base64_le(client_key.e.to_s(2)),
-      kty: 'RSA',
-      n: base64_le(client_key.n.to_s(2)),
-    }
+def protected_header
+  metadata = {
+    alg: 'RS256'
   }
+
+  base64_le(metadata)
 end
 ```
 
+(Currently LE [supports](https://github.com/letsencrypt/boulder/issues/1191#issuecomment-228087035) a few other signing algorithms: `ES256`, `ES384` and `ES512` - but `RS256` is by far the most popular choice. If you're interested in using elliptic curve signature algorithms - the `ES*` family - see [Appendix 7](#appendix-7-using-ec-client-keys)).
+
+Our choice of signing algorithm is one half of what LE will need to verify our signature - the other half is the **public part of our signing key**. There are two ways we'll bundle our public key into our protected header. When we set up our account for the first time, we'll send our public key as a JSON web key (JWK). JWK is a widely-used [standard] for sharing keys via JSON. Once we've registered our account and public key, LE will give use a unique key ID which we can use to reference our public key (which LE will store). For all subsequent requests, we'll just reference this key ID (`kid`).
+
+(Note: the use of `kid` is one of the major departures from ACME v1. In v1 we'd send our JWK with each request).
+
+Let's start with sending our public key as a JWK (which we'll do during account creation). The parts of the key we're interested in are the public key exponent (e) and the modulus (n). Helpfully our `client_key` has corresponding methods (`client_key.e` and `client_key.n`) - the only additionally steps we need to take are converting them to binary strings with `to_s(2)` ([documented here](http://ruby-doc.org/stdlib-2.3.0/libdoc/openssl/rdoc/OpenSSL/BN.html#to_s-method)), then (you guessed it), Base64 encoding them.
+
+We'll additionally have to specify the key type (`kty`) of `client_key` - in our case, it's an RSA key. We'll wrap everything in a `jwk` convenience method:
+
+```ruby
+def jwk
+  {
+    e: base64_le(client_key.e.to_s(2)),
+    kty: 'RSA',
+    n: base64_le(client_key.n.to_s(2)),
+  }
+end
+
+def protected_header
+  metadata = {
+    alg: 'RS256',
+    jwk: jwk
+  }
+
+  base64_le(metadata)
+end
+```
+
+We can now send our public key in JWK format - but (typically) we'll only do this once. After creating our account, we'll need to instead use the unique key ID that LE will assign to our stored public key. When we pass this `kid`, we provide it in place of our `jwk`:
+
+```ruby
+def protected_header(kid = nil)
+  metadata = { alg: 'RS256' }
+
+  if kid
+    metadata.merge!({ kid: kid })
+  else
+    metadata.merge!({ jwk: jwk })
+  end
+
+  return base64_le(metadata)
+end
+```
+
+Another important piece of metadata is the URL we're requesting - this will prevent an attacker from trying to sneakily redirect our request to another Let's Encrypt URL without the server noticing:
+
+```ruby
+def protected_header(url, kid = nil)
+  metadata = { alg: 'RS256', url: url }
+
+  if kid
+    metadata.merge!({ kid: kid })
+  else
+    metadata.merge!({ jwk: jwk })
+  end
+
+  return base64_le(metadata)
+end
+```
+
+We're almost done, but there's one additional preventative method we'll use to protect against would-be attackers :japanese_ogre:...
+
 <br>
 
-#### d. Protected header and the nonce
+#### d. The nonce
 
-We have our plaintext header - which contains the required components of our public key. We'll also need a **protected header** - basically a Base64 encoded version of our header which will form the other half of the data we'll be signing (alongside our payload).
-
-The protected header contains one additional element which our unprotected header doesn't - a [cryptographic nonce](https://en.wikipedia.org/wiki/Cryptographic_nonce). The linked article goes into lots of details, but a nonce is basically a one-time use code which we must attach to our request. It means if an attacker somehow sniffs out a request we made, and makes a carbon-copy duplicate request, the attackers attempt will fail (because the nonce has already been used).
+To protect against replay attacks, we'll add in a [cryptographic nonce](https://en.wikipedia.org/wiki/Cryptographic_nonce). The linked articles go into lots of detail, but a nonce is basically a one-time use code which we must attach to our request. It means if an attacker somehow sniffs out a request we made, and makes a carbon-copy duplicate request, the attackers attempt will fail (because the nonce has already been used).
 
 <p align='center'><img src='https://user-images.githubusercontent.com/636814/27398616-34eb14c0-56b2-11e7-8582-aee497307088.gif' width='350'></p>
 
-Let's Encrypt provides us a nonce in the headers of every response it gives us - so getting a nonce is just a case of requesting any Let's Encrypt API endpoint, and grabbing it from the `Replay-Nonce` header.
+Let's Encrypt provides us a nonce in the `Replay-Nonce` header of every request, so an efficient approach would be to save the nonce from each request, and use it for the subsequent one. LE also gives us a dedicated endpoint for fetching a new nonce (`/acme/new-nonce`) , so a lazier (but simpler) approach is to fetch fresh nonces from here for each request.
 
 Ruby comes with the `Net::HTTP` library built in for making HTTP requests, but it's a bit cumbersome. To make our life easier, we'll use [HTTParty](https://github.com/jnunemaker/httparty) - although this is by no means a necessity.
 
@@ -281,23 +348,37 @@ We'll send HTTParty's debug output to `$stdout` so we can see easily see the req
 HTTParty::Basement.default_options.update(debug_output: $stdout)
 ```
 
-As mentioned above, any Let's Encrypt API endpoint will do - let's use the `/directory` endpoint (effectively the root of the API). Because we only need the headers, we can just make a `HEAD` request:
+Now we're ready to make a request to the new nonce endpoint. Because we only need the headers, we can just make a `HEAD` request:
 
 ```ruby
-nonce = HTTParty.head('https://acme-v01.api.letsencrypt.org/directory')['Replay-Nonce']
+def nonce
+  HTTParty.head('https://acme-staging-v02.api.letsencrypt.org/acme/new-nonce')['Replay-Nonce']
+end
 ```
 
-We can now create our protected header:
+(I'm hard-coding the new nonce endpoint here, which is bad practice :speak_no_evil:. Don't worry, I'll fix it part g.)
+
+This gives us the final piece of our integrity protected header:
 
 ```ruby
-protected = base64_le(header.merge(nonce: nonce))
+def protected_header(url, kid = nil)
+  metadata = { alg: 'RS256', nonce: nonce, url: url }
+
+  if kid
+    metadata.merge!({ kid: kid })
+  else
+    metadata.merge!({ jwk: jwk })
+  end
+
+  return base64_le(metadata)
+end
 ```
 
 <br>
 
 #### e. Signature
 
-The last step to construct our request is proving its authenticity with a **signature**, generated using our *client private key*. First, let's consolidate everything we have so far:
+The last step to construct our request is to prove its authenticity with a **signature**, generated using our *client private key*. First, let's consolidate everything we have so far:
 
 ```ruby
 require 'openssl'
@@ -313,23 +394,35 @@ end
 client_key_path = File.expand_path('~/.ssh/id_rsa')
 client_key = OpenSSL::PKey::RSA.new IO.read(client_key_path)
 
-payload = { some: 'data'}
+payload = { some: 'data' }
 
-header = {
-  alg: 'RS256',
-  jwk: {
+def jwk
+  {
     e: base64_le(client_key.e.to_s(2)),
     kty: 'RSA',
     n: base64_le(client_key.n.to_s(2)),
   }
-}
+end
 
-nonce = HTTParty.head('https://acme-v01.api.letsencrypt.org/directory')['Replay-Nonce']
+def protected_header(url, kid = nil)
+  metadata = { alg: 'RS256', nonce: nonce, url: url }
+
+  if kid
+    metadata.merge!({ kid: kid })
+  else
+    metadata.merge!({ jwk: jwk })
+  end
+
+  return base64_le(metadata)
+end
+
+def nonce
+  HTTParty.head('https://acme-staging-v02.api.letsencrypt.org/acme/new-nonce')['Replay-Nonce']
+end
 
 request = {
   payload: base64_le(payload),
-  header: header,
-  protected: base64_le(header.merge(nonce: nonce))
+  protected: protected_header('/some-url')
 }
 ```
 
@@ -339,7 +432,7 @@ As mentioned [above](#c-header), we'll be using the SHA-256 hash function for ou
 hash_algo = OpenSSL::Digest::SHA256.new
 ```
 
-The specific data we'll need to sign is our protected header and our payload, joined with a period:
+The specific data we'll need to sign is simply our protected header and our payload, joined with a period:
 
 ```ruby
 request[:signature] = client_key.sign(hash_algo, [ request[:protected], request[:payload] ].join('.'))
@@ -355,7 +448,7 @@ Now we've built the request data just as Let's Encrypt wants, we have everything
 HTTParty.post(some_api_endpoint, body: JSON.dump(request))
 ```
 
-Let's put everything into a reusable method that can take an arbitrary URL and payload. (We'll move `client_key`, `hash_algo`, `header` and `nonce` into methods at the same time):
+Let's put everything into a reusable method that can take an arbitrary URL and payload. (We'll move `client_key` and `hash_algo` into methods at the same time):
 
 ```ruby
 HTTParty::Basement.default_options.update(debug_output: $stdout)
@@ -382,17 +475,36 @@ def hash_algo
   OpenSSL::Digest::SHA256.new
 end
 
-def nonce
-  HTTParty.head('https://acme-v01.api.letsencrypt.org/directory')['Replay-Nonce']
+def jwk
+  {
+    e: base64_le(client_key.e.to_s(2)),
+    kty: 'RSA',
+    n: base64_le(client_key.n.to_s(2)),
+  }
 end
 
-def signed_request(url, payload)
+def protected_header(url, kid = nil)
+  metadata = { alg: 'RS256', nonce: nonce, url: url }
+
+  if kid
+    metadata.merge!({ kid: kid })
+  else
+    metadata.merge!({ jwk: jwk })
+  end
+
+  return base64_le(metadata)
+end
+
+def nonce
+  HTTParty.head('https://acme-staging-v02.api.letsencrypt.org/acme/new-nonce')['Replay-Nonce']
+end
+
+def signed_request(url, payload, kid = nil)
   request = {
     payload: base64_le(payload),
-    header: header,
-    protected: base64_le(header.merge(nonce: nonce))
+    protected: protected_header(url, kid)
   }
-  request[:signature] = client_key.sign(hash_algo, [ request[:protected], request[:payload] ].join('.'))
+  request[:signature] = base64_le client_key.sign(hash_algo, [request[:protected], request[:payload]].join('.'))
 
   HTTParty.post(url, body: JSON.dump(request))
 end
@@ -401,56 +513,50 @@ end
 
 #### g. Fetching the endpoints
 
-The `/directory` endpoint that we use to fetch our nonce serves another purpose: it lists all the other endpoints which act as the starting points for all the core actions (registering a user, authorizing a domain, issuing a certificate etc.):
+I mentioned above that we should avoid hard-coding the URLs our client uses - the best-practice is to instead a special `/directory` endpoint. This directory lists all the key endpoints we'll need to get started with our key actions (registering a user, authorizing a domain, issuing a certificate etc.):
 
 ```json
 {
-  "key-change": "https://acme-v01.api.letsencrypt.org/acme/key-change",
+  "keyChange": "https://acme-staging-v02.api.letsencrypt.org/acme/key-change",
   "meta": {
-    "terms-of-service": "https://letsencrypt.org/documents/LE-SA-v1.1.1-August-1-2016.pdf"
+    "termsOfService": "https://letsencrypt.org/documents/LE-SA-v1.2-November-15-2017.pdf"
   },
-  "new-authz": "https://acme-v01.api.letsencrypt.org/acme/new-authz",
-  "new-cert": "https://acme-v01.api.letsencrypt.org/acme/new-cert",
-  "new-reg": "https://acme-v01.api.letsencrypt.org/acme/new-reg",
-  "revoke-cert": "https://acme-v01.api.letsencrypt.org/acme/revoke-cert"
+  "newAccount": "https://acme-staging-v02.api.letsencrypt.org/acme/new-acct",
+  "newNonce": "https://acme-staging-v02.api.letsencrypt.org/acme/new-nonce",
+  "newOrder": "https://acme-staging-v02.api.letsencrypt.org/acme/new-order",
+  "revokeCert": "https://acme-staging-v02.api.letsencrypt.org/acme/revoke-cert",
+  "z93cEwMHcG8": "https://community.letsencrypt.org/t/adding-random-entries-to-the-directory/33417"
 }
 ```
 
-(Note: unlike the API's endpoints, the directory is viewable without any kind of signing, you can just visit it [in your browser](https://acme-staging.api.letsencrypt.org/directory)).
+(Note: unlike most of the API's endpoints, the directory is viewable without any kind of special signed request, you can just visit it [in your browser](https://acme-staging-v02.api.letsencrypt.org)).
 
-Here the keys in the JSON object indicate the resource type, and the values are the URI we'll need to make a signed request to. Even though [Cool URIs don't change](https://www.w3.org/Provider/Style/URI), using the directory means we don't have to hard-code the endpoints - and so our client is more resilient to any changes Let's Encrypt might make (credit to [@kelunik](https://github.com/kelunik) for suggesting this).
+The camel-cased keys in the JSON object indicate the action (`newAccount` for account registration, `newOrder` to order a certificate etc.), and the values are the URI we'll need to make a signed request to. Even though [Cool URIs don't change](https://www.w3.org/Provider/Style/URI), using the directory means we don't have to hard-code the endpoints - and so our client is more resilient to any changes Let's Encrypt might make (credit to [@kelunik](https://github.com/kelunik) for suggesting this).
 
 To avoid making repeated requests to the directory, let's make an `endpoints` method:
 
 ```ruby
 def endpoints
-  @endpoints ||= HTTParty.get('https://acme-v01.api.letsencrypt.org/directory').to_h
+  @endpoints ||= HTTParty.get('https://acme-staging-v02.api.letsencrypt.org/directory').to_h
 end
 ```
 
-Since we're referencing the directory endpoint in both our `endpoints` and `nonce` methods, we can dry up our code by moving it into a constant. This will also make it easier to, for example, switch to LE's [staging server](https://acme-staging.api.letsencrypt.org/).
+I like to move the directory URI into a constant, to make it clear that this value shouldn't be changed at runtime:
 
 ```ruby
-DIRECTORY_URI = 'https://acme-v01.api.letsencrypt.org/directory'.freeze
-
-def nonce
-  HTTParty.head(DIRECTORY_URI)['Replay-Nonce']
-end
+DIRECTORY_URI = 'https://acme-staging-v02.api.letsencrypt.org/directory'.freeze
 
 def endpoints
   @endpoints ||= HTTParty.get(DIRECTORY_URI).to_h
 end
+
+def nonce
+  HTTParty.head(endpoints['newNonce'])['Replay-Nonce']
+end
+
 ```
 
-The neat thing is that this `DIRECTORY_URI` is the only URI we need to hardcode, every other endpoint we can either pull from the directory, or from the `Location` or `Link` headers of the API's responses. `Location` is easy to work with (it's just a single URI) - but `Link` headers need to be parsed. I've written a gem ([Nitlink](https://github.com/alexpeattie/nitlink)) for just that - so let's install and load it:
-
-```shell
-gem install nitlink
-```
-
-```ruby
-require 'nitlink/response'
-```
+The neat thing is that this `DIRECTORY_URI` is the only URI we need to hard-code; every other endpoint we can either pull from the directory, or from the `Location` headers of the API's responses.
 
 <br>
 
@@ -458,22 +564,41 @@ require 'nitlink/response'
 
 OK, we've laid the foundations - let's make our first actual request to the Let's Encrypt API! The first step is to register our client public key with Let's Encrypt.
 
-Since we're sending the public key with every request (in the `header` property of our JSON), we don't need to include much in the actual registration payload. At a minimum, we'll just need to specify the resource type: `new-reg` in this case.
+First, we should ensure the user has read and accepted the Let's Encrypt [Terms of Service](https://letsencrypt.org/documents/LE-SA-v1.2-November-15-2017.pdf). We can skip this skip if we want to be naughty, but [per the ACME spec](https://tools.ietf.org/html/draft-ietf-acme-acme-09#section-7.3):
+
+> Clients SHOULD NOT automatically agree to terms by default.  Rather, they SHOULD require some user interaction for agreement to terms.
+
+For our user interaction, we'll just print the ToS URL and get the user to confirm they're happy. We can grab the latest terms URL from the directory (under `meta.termsOfService`):
 
 ```ruby
-new_registration = signed_request(endpoints['new-reg'], {
-  resource: 'new-reg',
+tos_url = endpoints['meta']['termsOfService']
+accept_tos = "N"
+until accept_tos == "Y"
+  puts "Do you accept the LetsEncrypt terms? (#{ tos_url })"
+  accept_tos = gets.upcase.chars.first
+end
+```
+
+On to account creation! Since we're sending the public key with every request (in the `header` property of our JSON), we don't need to include much to register an account. In fact, we can register a valid account by just indicating that we accept the ToS:
+
+```ruby
+new_registration = signed_request(endpoints['newAccount'], {
+  termsOfServiceAgreed: true
 })
 ```
 
-We can optionally provide contact details (highly recommended), this will allow us to recover our key in case we lose it. We'll need to include the protocols for the contact details we provide - e.g. `mailto:` for email addresses, <strike>`tel:` for phone numbers</strike> (it turns out Let's Encrypt doesn't currently support this, see [here](https://github.com/letsencrypt/boulder/blob/release/docs/acme-divergences.md#section-62)).
+(Unsurprisingly, if `termsOfServiceAgreed` is anything other than `true`, we'll get a rejection).
+
+We can optionally provide contact details (highly recommended), this will allow us to recover our key in case we lose it. We'll need to include the protocols for the contact details we provide, namely `mailto:` for email addresses (which is all that ACME/LE currently supports).
 
 ```ruby
-new_registration = signed_request(endpoints['new-reg'], {
-  resource: 'new-reg',
+new_registration = signed_request(endpoints['newAccount'], {
+  termsOfServiceAgreed: true,
   contact: ['mailto:me@alexpeattie.com']
 })
 ```
+
+Note that Let's Encrypt will validate the domain the email address belongs to, so a made-up email address will trigger a rejection.
 
 <br>
 
@@ -528,33 +653,6 @@ If we try and register the same key again we'll get a 409 (Conflict) response:
 ```
 
 Don't worry, there are no side effects to attempting to re-register the same client key multiple times :relaxed:.
-
-#### Accepting the ToS
-
-Although we've successfully registered, Let's Encrypt won't let us do anything useful (like issue a certificate), until we accept their [Subscriber Agreement](https://letsencrypt.org/repository/#lets-encrypt-subscriber-agreement).
-
-To indicate our acceptance, we just need to make a request to the URI of our newly created user (returned in the response's `Location` header, in this case `https://acme-v01.api.letsencrypt.org/acme/reg/12345`) with the payload's `agreement` key set to the URI of the terms we're accepting. How do we know the URI of the terms? Eagle-eyed readers might have spotted above that it's returned as one of the response's `Link` headers:
-
-```
-Link: ... <https://letsencrypt.org/documents/LE-SA-v1.1.1-August-1-2016.pdf>;rel="terms-of-service"
-```
-
-**Update August 2017:** The URL of the current terms are now also available through the directory, and thus via our `endpoints` method, specifically `endpoints['meta']['terms-of-service']`.
-
-<br>
-
-We should also check that we got a 201 status (not a Conflict or malformed registration). Our final code for accepting the terms programatically looks like this:
-
-```ruby
-if new_registration.status == 201
-  signed_request(new_registration.headers['Location'], {
-    resource: 'reg',
-    agreement: new_registration.links.by_rel('terms-of-service').target
-  })
-end
-```
-
-(The `.links` method depends on the [Nitlink](https://github.com/alexpeattie/nitlink) gem, we'll get a `NoMethodError` if it's not installed). Notice that the resource type has changed, since we're not creating a new user, but modifying an existing one. Also, a real client should probably prompt the user to actually read the agreement - rather than just auto-accepting it :innocent:!
 
 <br>
 
@@ -882,7 +980,7 @@ certificate = OpenSSL::X509::Certificate.new(certificate_response.body)
 
 #### Adding intermediates
 
-We also need to complete our trust chain, which means grabbing the LetsEncrypt cross-signed intermediate certificate (see <https://letsencrypt.org/certificates/>). Some browsers will resolve an incomplete trust chain, but it's something we want to avoid. There's much more info on why we need to complete this step and the difference between the different intermediates LE offers in [Appendix 2: The trust chain & intermediate certificates](#appendix-2-the-trust-chain--intermediate-certificates).
+We also need to complete our trust chain, which means grabbing the Let's Encrypt cross-signed intermediate certificate (see <https://letsencrypt.org/certificates/>). Some browsers will resolve an incomplete trust chain, but it's something we want to avoid. There's much more info on why we need to complete this step and the difference between the different intermediates LE offers in [Appendix 2: The trust chain & intermediate certificates](#appendix-2-the-trust-chain--intermediate-certificates).
 
 Occasionally server software might want us to provide our intermediate certificates separately, but generally we'll bundle them together in a single file. Helpfully, LE provides a link to the latest intermediate certificate in the certificate response's `Link` header (it has the relation type `"up"`):
 
@@ -1301,7 +1399,7 @@ domain = SimpleIDN.to_unicode('müller.de')
 
 ## Appendix 7: Using EC client keys
 
-As well as support ECDSA-based certificates (see above), since 2016 LetsEncrypt has supported ECDSA for client (A.K.A account) keys. We'll have to make a few non-trivial modifications to our client to get EC client keys working though.
+As well as support ECDSA-based certificates (see above), since 2016 Let's Encrypt has supported ECDSA for client (A.K.A account) keys. We'll have to make a few non-trivial modifications to our client to get EC client keys working though.
 
 First, we'll need an EC keypair:
 
@@ -1538,7 +1636,7 @@ end
 
 A fun factoid: Let's Encrypt certificates are technically only valid of 89 days and 23 hours, not for a whole 90 days. This is because LE [backdates certificates by 1 hour](https://github.com/letsencrypt/boulder/blob/3431acfb9236de32c1da2e8eb626b6667e33872c/test/config-next/ca.json#L54) to ensure the certificates can be validated immediately by clients whose clocks might be slightly out. Therefore a certificate issued on August 1st 12:34 will expire October 30th 11:34.
 
-The validity period for Lets Encrypt certificates are relatively short. Per the CA/Browser Forum [Baseline Requirements](https://cabforum.org/wp-content/uploads/CA-Browser-Forum-BR-1.4.8.pdf), Section 6.3.2:
+The validity period for Let's Encrypt certificates are relatively short. Per the CA/Browser Forum [Baseline Requirements](https://cabforum.org/wp-content/uploads/CA-Browser-Forum-BR-1.4.8.pdf), Section 6.3.2:
 
 > Subscriber Certificates issued after 1 March 2018 MUST have a Validity Period no greater than 825 days.
 > Subscriber Certificates issued after 1 July 2016 but prior to 1 March 2018 MUST have a Validity Period no greater than 39 months.
@@ -1619,7 +1717,7 @@ Note that if it's been 30 days since you issued the certificate, the account key
 
 #### Scenario 3: You don't have access to the client key for the account which issued the certificate, or the private key for the domain, but you still control the certificate's domain(s)
 
-Per LetsEncrypt's [article on revocation](https://letsencrypt.org/docs/revoking/):
+Per Let's Encrypt's [article on revocation](https://letsencrypt.org/docs/revoking/):
 
 > If someone issued a certificate after compromising your host or your DNS, you’ll want to revoke that certificate once you regain control. In order to revoke the certificate, Let’s Encrypt will need to ensure that you control the domain names in that certificate (otherwise people could revoke each other’s certificates without permission)! To validate this control, Let’s Encrypt uses the same methods it uses to validate control for issuance: you can put a value in a DNS TXT record, put a file on an HTTP server, or offer a special TLS certificate.
 

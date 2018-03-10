@@ -44,17 +44,22 @@ def endpoints
   @endpoints ||= HTTParty.get(DIRECTORY_URI).to_h
 end
 
-def signed_request(url, payload, kid = nil)
-  protected_header = { alg: 'RS256', nonce: nonce, url: url }
+def protected_header(url, kid = nil)
+  metadata = { alg: 'RS256', nonce: nonce, url: url }
+
   if kid
-    protected_header.merge!({ kid: kid })
+    metadata.merge!({ kid: kid })
   else
-    protected_header.merge!({ jwk: jwk })
+    metadata.merge!({ jwk: jwk })
   end
 
+  return base64_le(metadata)
+end
+
+def signed_request(url, payload, kid = nil)
   request = {
     payload: base64_le(payload),
-    protected: base64_le(protected_header)
+    protected: protected_header(url, kid)
   }
   request[:signature] = base64_le client_key.sign(hash_algo, [request[:protected], request[:payload]].join('.'))
 
