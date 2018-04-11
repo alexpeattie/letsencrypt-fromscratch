@@ -149,13 +149,7 @@ One problem we'll run into is that when we sign our payload with our key, we mig
 
 ```ruby
 puts client_key.sign OpenSSL::Digest::SHA256.new, 'Hello world'
-��ۉ��7�xM��\�AU=�KGQ��ao�:Q-H�WW�a_Ԇ����+a
-                                          ��|X]�s}V�oya���'68L6����P����f��yKV���
-�I@���a��[�����C���VXM+�
-                        ��oQ�@�B�"]Uzr�N�R]]{9;�N:��G�ӗaM�S��H�ŵq���Bq�9��  ��So�Q���tk�;����z��d�<=�� +B
-_t�
-   �����~���<˯ޤ
-                �%Ê�k��
+ #=> ��ۉ��7�xM��\�AU=�KGQ��ao�:Q-H�WW�a_Ԇ����+a≈��|X]�s}V�oya���'68L6����P����f��yKV���≈�I@���a��[�����C���VXM+�≈��oQ�@�B�"]Uzr�N�R]]{9;�N:��G�ӗaM�S��H�ŵq���Bq�9��  ��So�Q���tk�;����z��d�<=�� +B≈_t�≈�����~���<˯ޤ≈�%Ê�k��
 ```
 
 To avoid dealing with non-ASCII characters we'll need to [Base64 encode](https://en.wikipedia.org/wiki/Base64) most of our data. The good news is Ruby comes with Base64 handling as [part of the standard library](http://ruby-doc.org/stdlib-2.3.0/libdoc/base64/rdoc/Base64.html):
@@ -195,7 +189,7 @@ The **payload** is the simplest part of our request. It's just JSON that we'll B
 ```ruby
 base64_le '{"resource":"new-reg"}'
  #=> "eyJyZXNvdXJjZSI6ICJuZXctcmVnIn0"
- ```
+```
 
 This a totally valid payload that we can send to Let's Encrypt. Obviously it'll be more convienient not to have to construct JSON strings by hand - so let's load in the [JSON library](http://ruby-doc.org/stdlib-2.3.0/libdoc/json/rdoc/JSON.html) (again part of the Ruby standard lib):
 
