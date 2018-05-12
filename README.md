@@ -187,7 +187,7 @@ end
 The **payload** is the simplest part of our request. It's just JSON that we'll Base64 encode using our method above:
 
 ```ruby
-base64_le '{"resource":"new-reg"}'
+base64_le '{"resource": "new-reg"}'
  #=> "eyJyZXNvdXJjZSI6ICJuZXctcmVnIn0"
 ```
 
