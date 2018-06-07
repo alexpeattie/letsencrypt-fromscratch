@@ -153,6 +153,8 @@ POST https://acme-staging-v02.api.letsencrypt.org/acme/new-acct
 
 Notice that we have three keys in the JSON we're `POST`ing to Let's Encrypt: `"payload"`, `"protected"` and `"signature"`. All requests we send to LE will contain only these keys, which each serve a distinct role.
 
+> :warning: V2 breaking change: Requests previously used to include an unprotected header (provided with the key `"header"`).
+
 **`"payload"`**, as the name, implies is where the 'meat' of the request goes. Remember our [Github example](#user-content-github-example), where we provided the title and body of the issue we were creating? This is the kind of that goes into payload. If we're registering an account, the payload will contain our registration details (email, name, contact details etc.). If we're ordering a certificate, the payload will contain the domain names we're looking to secure.
 
 **`"protected"`** is short for 'integrity-protected header'; this is where we include some important metadata. First we confirm the **URL** we're requesting and include a **nonce** (see part d) - this makes it difficult for an attacker to try and redirect or replay our requests. We also include details about our **public key** - either by sending the important parts of the key in a special format, or a unique ID for the key which LE keeps on file. LE will then use the public key to verify the...
@@ -190,7 +192,7 @@ Base64.urlsafe_encode64('test').delete('=')
  #=> "dGVzdA"
 ```
 
-(Or in [Ruby 2.3](http://ruby-doc.org/stdlib-2.3.0/libdoc/base64/rdoc/Base64.html#method-i-urlsafe_encode64))
+(Or in [Ruby 2.3+](http://ruby-doc.org/stdlib-2.3.0/libdoc/base64/rdoc/Base64.html#method-i-urlsafe_encode64))
 
 ```ruby
 Base64.urlsafe_encode64('test', padding: false)
@@ -245,7 +247,7 @@ We'll need to give Let's Encrypt two things for it to validate the authenticity 
 
 The protected header is where we include metadata which allows Let's Encrypt to validate the authenticity of our request, and makes the request more difficult forge, replay or redirect.
 
-In the next section, we'll cryptographically sign our payload and header, to protect our request from tampering. The first thing we'll need to do is give LE a heads-up as to the particular signing algorithm we're planning to use. We'll use the RSA with SHA-256 algorithm (or more formally, [RSA PKCS#1 v1.5 signature with SHA-256](https://tools.ietf.org/html/draft-ietf-jose-json-web-algorithms-14#section-3.1)) - we specify this choice with the `alg` key:
+In the next section, we'll cryptographically sign our payload and header, to protect our request from tampering. The first thing we'll need to do is give LE a heads-up as to the particular signing algorithm we're planning to use. We'll use the RSA with SHA-256 algorithm (or more formally, [RSA PKCS#1 v1.5 signature with SHA-256](https://tools.ietf.org/html/draft-ietf-jose-json-web-algorithms-14#section-3.1)) - we specify this choice with the `"alg"` key:
 
 ```ruby
 def protected_header
@@ -261,7 +263,7 @@ end
 
 Our choice of signing algorithm is one half of what LE will need to verify our signature - the other half is the **public part of our signing key**. There are two ways we'll bundle our public key into our protected header. When we set up our account for the first time, we'll send our public key as a JSON web key (JWK). JWK is a widely-used [standard] for sharing keys via JSON. Once we've registered our account and public key, LE will give use a unique key ID which we can use to reference our public key (which LE will store). For all subsequent requests, we'll just reference this key ID (`kid`).
 
-(Note: the use of `kid` is one of the major departures from ACME v1. In v1 we'd send our JWK with each request).
+> :warning: V2 breaking change: the use of `kid` is one of the major departures from ACME V1. In V1 we'd send our JWK with each request, and `kid` didn't exist.
 
 Let's start with sending our public key as a JWK (which we'll do during account creation). The parts of the key we're interested in are the public key exponent (e) and the modulus (n). Helpfully our `client_key` has corresponding methods (`client_key.e` and `client_key.n`) - the only additionally steps we need to take are converting them to binary strings with `to_s(2)` ([documented here](http://ruby-doc.org/stdlib-2.3.0/libdoc/openssl/rdoc/OpenSSL/BN.html#to_s-method)), then (you guessed it), Base64 encoding them.
 
@@ -303,6 +305,8 @@ end
 ```
 
 Another important piece of metadata is the URL we're requesting - this will prevent an attacker from trying to sneakily redirect our request to another Let's Encrypt URL without the server noticing:
+
+> :warning: V2 breaking change: the requirement to include the URL with each request is new in V2.
 
 ```ruby
 def protected_header(url, kid = nil)
@@ -442,10 +446,16 @@ request[:signature] = client_key.sign(hash_algo, [ request[:protected], request[
 
 #### f. Making requests
 
-Now we've built the request data just as Let's Encrypt wants, we have everything we need to start making requests:
+> :warning: V2 breaking change: the LE API requires the correct Content-Type in POST requests as of March 29th 2018.
+
+Now we've built the request data just as Let's Encrypt wants, we have everything we need to start making requests. Per the ACME spec ([Section 6.2](https://tools.ietf.org/html/draft-ietf-acme-acme-10#section-6.2)):
+
+> Because client requests in ACME carry JWS objects in the Flattened JSON Serialization, they must have the "Content-Type" header field set to "application/jose+json"
+
+So, our final request looks like this:
 
 ```ruby
-HTTParty.post(some_api_endpoint, body: JSON.dump(request))
+HTTParty.post(some_api_endpoint, body: JSON.dump(request), headers: { 'Content-Type' => 'application/jose+json' })
 ```
 
 Let's put everything into a reusable method that can take an arbitrary URL and payload. (We'll move `client_key` and `hash_algo` into methods at the same time):
@@ -529,6 +539,8 @@ I mentioned above that we should avoid hard-coding the URLs our client uses - th
 }
 ```
 
+> :warning: V2 breaking change: several endpoints have been renamed, and LE has switched from kebab-case to camelCase.
+
 (Note: unlike most of the API's endpoints, the directory is viewable without any kind of special signed request, you can just visit it [in your browser](https://acme-staging-v02.api.letsencrypt.org)).
 
 The camel-cased keys in the JSON object indicate the action (`newAccount` for account registration, `newOrder` to order a certificate etc.), and the values are the URI we'll need to make a signed request to. Even though [Cool URIs don't change](https://www.w3.org/Provider/Style/URI), using the directory means we don't have to hard-code the endpoints - and so our client is more resilient to any changes Let's Encrypt might make (credit to [@kelunik](https://github.com/kelunik) for suggesting this).
@@ -587,9 +599,13 @@ new_registration = signed_request(endpoints['newAccount'], {
 })
 ```
 
+> :warning: V2 breaking change: the flow for accepting terms has changed. You used to be able to register an account, which would be inactive until the ToS were accepted. It's now mandatory to accept the terms at the point of account creation.
+
 (Unsurprisingly, if `termsOfServiceAgreed` is anything other than `true`, we'll get a rejection).
 
 We can optionally provide contact details (highly recommended), this will allow us to recover our key in case we lose it. We'll need to include the protocols for the contact details we provide, namely `mailto:` for email addresses (which is all that ACME/LE currently supports).
+
+> :warning: V2 breaking change: ACME used to support adding telephone numbers with the `tel:` prefix, this seems to have been removed.
 
 ```ruby
 new_registration = signed_request(endpoints['newAccount'], {
@@ -598,7 +614,7 @@ new_registration = signed_request(endpoints['newAccount'], {
 })
 ```
 
-Note that Let's Encrypt will validate the domain the email address belongs to, so a made-up email address will trigger a rejection.
+Note that Let's Encrypt will validate the domain the email address belongs to, so a made up email address will trigger a rejection.
 
 <br>
 
@@ -607,25 +623,32 @@ Note that Let's Encrypt will validate the domain the email address belongs to, s
 Sending the request should give us back a successful response:
 
 ```json
--> "HTTP/1.1 201 Created"
--> "Content-Type: application/json"
--> "Location: https://acme-v01.api.letsencrypt.org/acme/reg/12345"
--> "Link: <https://acme-v01.api.letsencrypt.org/acme/new-authz>;rel=\"next\", <https://letsencrypt.org/documents/LE-SA-v1.1.1-August-1-2016.pdf>;rel=\"terms-of-service\""
+-> "HTTP/1.1 201 Created\r\n"
+-> "Link: <https://letsencrypt.org/documents/LE-SA-v1.2-November-15-2017.pdf>;rel=\"terms-of-service\"\r\n"
+-> "Location: https://acme-staging-v02.api.letsencrypt.org/acme/acct/5895484\r\n"
 ...
+reading 919 bytes...
 {
-  "id": 12345,
+  "id": 5895484,
   "key": {
     "kty": "RSA",
-    "n": "wlpAF2eAhpzJDGCco-c9hhd31NGAyhkFeivqfmt7ZQiphRiuSwF_0_3lOnCRpdpRIeVheIPVK6FofcFVmRjzdyDeZmN5ssk5oi2v1y8hSB7SM2QCoqlZ3L8uEGKzzwQfzSIQGIR56X5GrTKaCjBrzqrSM0VzRg5-gp8ZDqsyceSUaf7SgScxexfgbcaRXtJ1aVLYT5FfsDgV768gRcBxaKQapFQ47M7JN8OTOq6QIla6acp24eNo6PMtH8Mf0hJwpcWOs2A_0VcNzV7XBl8shYEeERyqbNXIZsF7njF8WInk7-v0EiYPV2w0xjBuFnbX7cw8YqveG81yirYGScR5ASeER5dxtWNyXFXkK9KpI13Vvf-0ivzrgeJTUsKz7EAjL2vof2QleKZHjP6f63rvaIMK5FaGojhHSzzMdeP3FaG1mP7N5vY3J0oZzhny_Jd9vNysCiklsUNUr8ZT-ocTKHbiO6ZEZdj8Wtjmpr5kvfPUtosNodaMUNFv-7UFRWNf49qJKo21UzpeeM7Us0hKPNVd9VU0qD0jsya7w1EjimiBqwo6vD_KoH-R2bwWlaQ9Ucy6ahfNPogI3zqMTpUfMXGA0uMj6anp-daOSwuEus2ogY0x12OUn3XivB9VzbCNadAT9JqKRrhRHE-7tfN6TFt7CtLjGCe1ShMn3wsMFBU",
+    "n": "wHSRCVc0AI_G36MePdFotkyrTIgzgVuDXFValp7Vm-Qu0mVdS06h_Gjulrwj1TseXbE5Q90qIPSCaHKhV4jr0ahq6qRam2LsBh3HfQz8A3eZ5AoVOlBg7xwBbYgA2QVYlfqQbHmlfu_ZSxk6oCHjtGg3ld6VsC_FG67Ab08uGAlXQyGtsOolo7AOcduJqdCG-jgWeaw_g0FH8kmO0GhG88m7m3H3Cbe0GjQr8Mvz-T43axln87tY3u21IbfWpoEM87JHUJ9z_Csx26Hgi7BObkUjJqXK3LCV9dnAKuQqNA2ewWd35zMCdE95TZ03vB21GlAM3o4orTUQERoWcmcMxl8vghRjlp1vH6_btPDGaN-dVLQ_AE0eTXeIPbGCM4Tb7wJsWkv0qtw1xXXe8kVQeBKcaMQrI1zaW0EB1kp0_NP9NdLMZnYVtsOOrOHpj42d6rIsYyv3EmQwYHArpQJFs335SmCoTFjKTu0NMhjLU0P6ERay7VINPCjoEJXd5D7QtO1BLrq5A2kV0LNT9pxeQkoQctRS9M3mNFvhvf2qnM6d4AJpysmGnH95a8VLTOUaxY_EXudD3sfmM0uCPEB_C-jRCHO8CRhDIVX_rPW-muQ_wAqrbm73r9_Wd5kO-jKsbnBXbiXLjcR06bjioHn4DGkCoi5viW64TsEPxexpn48",
     "e": "AQAB"
   },
-  "contact": ["mailto:me@alexpeattie.com"],
-  "initialIp": "101.222.66.199",
-  "createdAt": "2015-12-12T12:07:23.755314388Z"
+  "contact": [
+    "mailto:hello@example.com"
+  ],
+  "initialIp": "123.456.744.89",
+  "createdAt": "2018-04-10T10:38:54.12898489Z",
+  "status": "valid"
 }
 ```
 
-The successful response basically just echoes back to us our registration details. We can see the exponent + modulus (`e` and `n`) values of our public key included at the top, as well as the unique `id` of our new account.
+The successful response basically just echoes back to us our registration details. We can see the exponent + modulus (`e` and `n`) values of our public key included at the top, as well as the unique `id` of our new account. Most important is our unique account URL in the `Location` header, in our case: `https://acme-staging-v02.api.letsencrypt.org/acme/acct/5895484`. This will serve as the identifier for our public key, so we won't need to send our exponent + modulus going forward. Let's save our `kid` for future requests:
+
+```ruby
+kid = new_registration.headers['Location']
+```
 
 Note that LE verifies the domains of emails we provide (by checking their DNS `A` record), so make sure it's a real domain, otherwise you'll get an 400 (Bad Request) response:
 
@@ -637,22 +660,18 @@ Note that LE verifies the domains of emails we provide (by checking their DNS `A
 }
 ```
 
-If we try and register the same key again we'll get a 409 (Conflict) response:
+If we try and register the same key again we'll get an empty 200 (OK) response:
 
 ```json
--> "HTTP/1.1 409 Conflict"
+-> "HTTP/1.1 200 OK"
 -> "Content-Type: application/problem+json"
--> "Location: https://acme-v01.api.letsencrypt.org/acme/reg/12345"
+-> "Location: https://acme-staging-v02.api.letsencrypt.org/acme/acct/5895484"
 ...
--> "Connection: close"
-{
-  "type": "urn:acme:error:malformed",
-  "detail": "Registration key is already in use",
-  "status": 409
-}
+reading 0 bytes...
+-> ""
 ```
 
-Don't worry, there are no side effects to attempting to re-register the same client key multiple times :relaxed:.
+Note that our account URL (`kid`) is again sent to us in the `Location` header - so this can be useful if we need to fetch the `kid` for an existing public key/account :relaxed:.
 
 <br>
 
@@ -662,7 +681,7 @@ Don't worry, there are no side effects to attempting to re-register the same cli
 
 The next step is to inform Let's Encrypt which domain or subdomain we to provision a certificate for. In this guide I'm using the example **le.alexpeattie.com**. This is the first part of a multistep verification process to prove we're the legitimate owner of the domain:
 
-  - [a).](#a-asking-lets-encrypt-for-the-challenges) We ask LE for the challenge
+  - [a).](#a-placing-our-order-with-lets-encrypt) We place an order with LE
   - [b).](#b-lets-encrypt-gives-us-our-challenges) LE gives us a challenge to prove we control the domain
   - [c)](#c-option-1-completing-the-http-01-challenge) or [d).](#d-option-2-completing-the-dns-01-challenge) We complete the HTTP- or DNS-based challenge, and notify LE that we're ready
   - [e).](#e-telling-le-weve-completed-the-challenge) LE checks the challenge has been completed to it's satisfaction
@@ -670,99 +689,117 @@ The next step is to inform Let's Encrypt which domain or subdomain we to provisi
 
 <br>
 
-Challenges are how we prove a sufficient level of control over the identifier (domain name) in question. We can do this either by serving a specific response when LE hits a specific URL (which generally means uploading a file to our web-server), provisioning a DNS record, or by leveraging the [Server Name Indication](https://tools.ietf.org/html/rfc6066#section-3) extension of TLS to serve a special self-signed certificate.
+Challenges are how we prove a sufficient level of control over the identifier (domain name) in question. We can do this either by serving a specific response when LE hits a specific URL (which generally means uploading a file to our web-server), or by provisioning a DNS record. We'll need to use the latter type of challenge (DNS-based) if we want to issue a wildcard certificate.
 
-We'll cover the first two kinds of challenge: `http-01` and `dns-01` but not the third (`tls-sni-01`).
+> :warning: V2 breaking change: Previous ACME versions provided challenges which leveraged the [Server Name Indication](https://tools.ietf.org/html/rfc6066#section-3) extension of TLS to serve a special self-signed certificate. These challenges have been [removed from the latest ACME spec](https://tools.ietf.org/html/draft-ietf-acme-acme-11#section-9.7.8) - partly due to a vulnerability affected TLS-SNI on shared hosting infrastructures (see [here](https://community.letsencrypt.org/t/2018-01-09-issue-with-tls-sni-01-and-shared-hosting-infrastructure/49996)). However, the challenge types remain reserved and might be brought back in the future.
 
 <br>
 
-#### a. Asking Let's Encrypt for the challenges
+#### a. Placing our order with Let's Encrypt
 
-Asking LE for our new challenge is just a case of making another request to the LE API - this time to create a `new-authz` (`authz` is short for **auth**ori**z**ation). 
+Asking LE to begin the process of certificate issuance is just a case of making another request to the LE API - this time to create a `newOrder`. 
 
-As you can probably guess, this means making a request to the `new-authz` endpoint with our `resource` option set to (you guessed it) `new-authz`. Beyond that just need tell LE what identifier (domain name) we want to authorize:
+> :warning: V2 breaking change: We used to instead create an authorization directly. Now we create an order, and LE sends us a link to the authorization(s).
+
+As you can probably guess, this means making a request to the `newOrder` endpoint. Beyond that just need tell LE what identifier (domain name) we want to authorize:
 
 ```ruby
-auth = signed_request(endpoints['new-authz'], {
-  resource: 'new-authz',
-  identifier: {
+order = signed_request(endpoints['newOrder'], {
+  identifiers: [{
     type: 'dns',
-    value: 'le.alexpeattie.com'
-  }
-})
+    value: domain
+  }]
+}, kid)
 ```
 
-The ACME spec is designed to be flexible enough to authorize more than just domain names in the future - which is why we have to explicitly state we're authorizing a domain name with `type: 'dns'`. We could authorize the root domain with `value: 'alexpeattie.com'`. We can also provide a Punycode encoded IDN, see [Appendix 6](#appendix-6-idn-support).
+Note that for this `signed_request`, as we'll do for every request after registering, we provide the `kid` we saved earlier.
+
+The ACME spec is designed to be flexible enough to authorize more than just domain names in the future - which is why we have to explicitly state we're authorizing a domain name with `type: 'dns'`. We could authorize the root domain with `value: 'alexpeattie.com'`, or for all immediate subdomains (i.e. create a wildcard certificate) with `value: '*.alexpeattie.com'`. We can also provide a Punycode encoded IDN, see [Appendix 6](#appendix-6-idn-support). As you can probably guess, since `"identifiers"` is an array, we could send through multiple explicit domains too.
 
 <br>
 
 #### b. Let's Encrypt gives us our challenges
 
-Let's Encrypt should send up back a nice meaty response like the below :meat_on_bone: -
+Assuming the domain we sent was properly formatted, Let's Encrypt should return a response like this:
+
+```json
+{
+  "status": "pending",
+  "expires": "2018-04-17T11:01:39.88615597Z",
+  "identifiers": [
+    {
+      "type": "dns",
+      "value": "le.alexpeattie.com"
+    }
+  ],
+  "authorizations": [
+    "https://acme-staging-v02.api.letsencrypt.org/acme/authz/KHeCk-lud6nXQAb7c-WQyIl_DORwsHaMCIaBp_C-w_E"
+  ],
+  "finalize": "https://acme-staging-v02.api.letsencrypt.org/acme/finalize/120651/340054"
+}
+```
+
+Our order's been successfully created, but it's initial status is `"pending"` which means we haven't proven to LE that we control the domain; we're aiming to change it to `"valid"`. LE also sends us some important URLs: our `"authorizations"` (1 per the `"identifiers"` in the last step) - this is what we'll use to fetch our challenges shortly. The `"finalize"` URL will issue the certificate once our challenge is passed.
+
+Also notice that our order has an expiry date: 1 week after are order was placed. We need to validate our control of the requested the domain by then, otherwise this order will expire and we'll need to place a new one. The good new is that passing the challenge should only take a few minutes :innocent:.
+
+Let's begin by looking at what's inside our `"authorizations"` URL:
+
+```ruby
+HTTParty.get(order['authorizations'].first)
+```
 
 ```json
 {
   "identifier": {
     "type": "dns",
-    "value": "le.alexpeattie.com"
+    "value": "le.example.com"
   },
   "status": "pending",
-  "expires": "2016-01-15T19:28:33.644298086Z",
-  "challenges": [{
-    "type": "tls-sni-01",
-    "status": "pending",
-    "uri": "https://acme-v01.api.letsencrypt.org/acme/challenge/-gPc-DOOMPAqlaNV2_NCbwieC7cDgmsDxS4d0Ounp8A/5157173",
-    "token": "rsFpjtnLgfXS8hMrAAcSsXJ98q7YNlA2Iyky-EWmoDY"
-  }, {
-    "type": "http-01",
-    "status": "pending",
-    "uri": "https://acme-v01.api.letsencrypt.org/acme/challenge/-gPc-DOOMPAqlaNV2_NCbwieC7cDgmsDxS4d0Ounp8A/5157174",
-    "token": "w2iwBwQq2ByOTEBm6oWtq5nNydu3Oe0tU_H24X-8J10"
-  }, {
-    "type": "dns-01",
-    "status": "pending",
-    "uri": "https: //acme-v01.api.letsencrypt.org/acme/challenge/-gPc-DOOMPAqlaNV2_NCbwieC7cDgmsDxS4d0Ounp8A/5157175",
-    "token": "U-85Krl7E2bPhqhdrjTuBoeIc7IVJ7Z4wyUhhn0uij0"
-  }],
-  "combinations": [
-    [0],
-    [2],
-    [1]
+  "expires": "2018-04-17T11:01:39Z",
+  "challenges": [
+    {
+      "type": "dns-01",
+      "status": "pending",
+      "url": "https://acme-staging-v02.api.letsencrypt.org/acme/challenge/KHeCk-lud6nXQAb7c-WQyIl_DORwsHaMCIaBp_C-w_E/116525939",
+      "token": "rw76epX0FXz5XLIQEhAWsSjP_cXeXsVNJVdUjwntej8"
+    },
+    {
+      "type": "http-01",
+      "status": "pending",
+      "url": "https://acme-staging-v02.api.letsencrypt.org/acme/challenge/KHeCk-lud6nXQAb7c-WQyIl_DORwsHaMCIaBp_C-w_E/116525940",
+      "token": "qDfPwOqgHfbEuggeq8XrPrBNFV11mgTRg6RNrcHSij4"
+    }
   ]
 }
 ```
 
-Let's break this down. First our `"identifier"` is echoed back to us, along with its `"status"` - right now it's `"pending"` which means we haven't proven to LE that we control the domain; we're aiming to change it to `"valid"`. Our challenge also has an expiry date - 1 week from now at the time of writing.
+We can see our `"identifier"` is echoed back to us, along with the authorization's `"status"` and `"expiry"` which matches that of our order. But we're really only interested in the `"challenges"`; we're provided with two distinct challenges corresponding with the two means we can convince LE we own the domain (crafting a specific HTTP response to a special endpoint for `http-01`, provisioning a special DNS record for `dns-01`).
+
+When we created our `newOrder` we mentioned we'd be given one authorization URL for each identifier we provided. In this example, we're only sending a single domain/identifier, but let's generalize our code to fetch the challenge data for every authorization URL, and then separate our HTTP and DNS challenges:
 
 ```ruby
+challenges = order['authorizations'].flat_map do |auth_url|
+  HTTParty.get(auth_url)['challenges']
+end
+
 http_challenge, dns_challenge = ['http-01', 'dns-01'].map do |challenge_type|
-  auth['challenges'].find { |challenge| challenge['type'] == challenge_type }
+  challenges.find { |challenge| challenge['type'] == challenge_type }
 end
 ```
 
-The `"uri"` of the challenge will allow us to notify LE that we're ready to take the challenge, on to check if we've passed. The `"token"` is a unique, unguessable, random value sent to us by LE that we'll need to **incorporate into our challenge response** to prove we control the domain.
-
-`"combinations"` is a another feature that's designed for the future. Right now we only have to pass 1 challenge to convince LE we control the domain. In the future we might see something like this:
+Each of our challenges have two key components:
 
 ```json
-"challenges": [{
-  "type": "email-01",
-  "..."
-}, {
+{
   "type": "http-01",
-}, {
-  "type": "tls-sni-01",
-}, {
-  "type": "dns-01",
-}],
-"combinations": [
-  [0, 1],
-  [2],
-  [3]
-]
+  "status": "pending",
+  "url": "https://acme-staging-v02.api.letsencrypt.org/acme/challenge/KHeCk-lud6nXQAb7c-WQyIl_DORwsHaMCIaBp_C-w_E/116525940",
+  "token": "qDfPwOqgHfbEuggeq8XrPrBNFV11mgTRg6RNrcHSij4"
+}
 ```
 
-Which would mean we'd have to either pass both challenges 0 & 1 (the `"email-01"` and `"http-01"` challenges), or challenge 2 or challenge 3 (`"tls-sni-01"` or `"dns-01"`).
+The first is the `"uri"` of the challenge, which will allow us to notify LE that we're ready to take the challenge, on to check if we've passed. The second is the `"token"`: a unique, unguessable, random value sent to us by LE that we'll need to **incorporate into our challenge response** to prove we control the domain. Exactly how we'll incorporate our token depends on which kind of challenge we're taking....
 
 <br>
 
@@ -772,9 +809,9 @@ Our first option is the `http-01` challenge. To pass this we need to ensure that
 
 `http://<< Domain >>/.well-known/acme-challenge/<< Challenge token >>`
 
-They receive a specific response (more on that below). Our domain is `le.alexpeattie.com`, `.well-known/acme-challenge/` is a fixed path [defined](https://tools.ietf.org/html/draft-ietf-acme-acme-01#section-7.2) by ACME, and our challenge token is `w2iwBwQq2ByOTEBm6oWtq5nNydu3Oe0tU_H24X-8J10`, so the endpoint we'll need to serve the response from is:
+They receive a specific response (more on that below). Our domain is `le.alexpeattie.com`, `.well-known/acme-challenge/` is a fixed path [defined](https://tools.ietf.org/html/draft-ietf-acme-acme-01#section-7.2) by ACME, and our challenge token is `qDfPwOqgHfbEuggeq8XrPrBNFV11mgTRg6RNrcHSij4`, so the endpoint we'll need to serve the response from is:
 
-`http://le.alexpeattie.com/.well-known/acme-challenge/w2iwBwQq2ByOTEBm6oWtq5nNydu3Oe0tU_H24X-8J10`
+`http://le.alexpeattie.com/.well-known/acme-challenge/qDfPwOqgHfbEuggeq8XrPrBNFV11mgTRg6RNrcHSij4`
 
 ##### The key authorization
 
