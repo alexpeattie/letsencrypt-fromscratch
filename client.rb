@@ -1,14 +1,11 @@
-%w(openssl base64 json httparty dnsimple tempfile net/scp resolv uri).each { |lib| require lib }
+%w(openssl base64 json httparty dnsimple resolv stringio net/scp).each { |lib| require lib }
 
 HTTParty::Basement.default_options.update(debug_output: $stdout)
 
-# Ruby EC key implementation monkey-patch (see https://alexpeattie.com/blog/signing-a-csr-with-ecdsa-in-ruby)
-OpenSSL::PKey::EC.send(:alias_method, :private?, :private_key?)
-
-DIRECTORY_URI = 'https://acme-staging-v02.api.letsencrypt.org/directory'.freeze
+DIRECTORY_URI = 'https://acme-v02.api.letsencrypt.org/directory'.freeze
 
 # domain = *.example.com for a wildcard certificate
-domain, root_domain, email = 'le.example.com', 'example.com', 'me+bye@example.com'
+domain, root_domain, email = 'le.example.com', 'example.com', 'me@example.com'
 preferred_challenge = 'http-01' # or 'dns-01',
 certificate_type = 'rsa' # or ecdsa
 
@@ -56,7 +53,7 @@ def protected_header(url, kid = nil)
   return base64_le(metadata)
 end
 
-def signed_request(url, payload, kid = nil)
+def signed_request(url, payload: '', kid: nil)
   request = {
     payload: base64_le(payload),
     protected: protected_header(url, kid)
@@ -71,9 +68,9 @@ def thumbprint
   base64_le(key_digest)
 end
 
-def upload(local_path, remote_path)
+def upload(file_contents, remote_path)
   server_ip = '162.243.201.152' # see Appendix 3
-  Net::SCP.upload!(server_ip, 'root', local_path, remote_path)
+  Net::SCP.upload!(server_ip, 'root', StringIO.new(file_contents), remote_path)
 end
 
 tos_url = endpoints['meta']['termsOfService']
@@ -83,99 +80,93 @@ until accept_tos == "Y"
   accept_tos = gets.upcase.chars.first
 end
 
-new_registration = signed_request(endpoints['newAccount'], {
+new_registration = signed_request(endpoints['newAccount'], payload: {
   termsOfServiceAgreed: true,
   contact: ['mailto:' + email]
 })
 kid = new_registration.headers['Location']
 
-order = signed_request(endpoints['newOrder'], {
+order = signed_request(endpoints['newOrder'], payload: {
   identifiers: [{
     type: 'dns',
     value: domain
   }]
-}, kid)
+}, kid: kid)
 
-# challenges = order['authorizations'].flat_map do |auth_url|
-#   HTTParty.get(auth_url)['challenges']
-# end
-# challenge, challenge_response = nil, nil
+challenges = order['authorizations'].flat_map do |auth_url|
+  signed_request(auth_url, kid: kid)['challenges']
+end
+challenge, challenge_response = nil, nil
 
-# http_challenge, dns_challenge = ['http-01', 'dns-01'].map do |challenge_type|
-#   challenges.find { |challenge| challenge['type'] == challenge_type }
-# end
+http_challenge, dns_challenge = ['http-01', 'dns-01'].map do |challenge_type|
+  challenges.find { |challenge| challenge['type'] == challenge_type }
+end
 
-# if preferred_challenge == 'http-01'
-#   raise "Use the dns-01 for wildcard certs" if domain.start_with?("*")
-#   challenge, challenge_response = http_challenge, [http_challenge['token'], thumbprint].join('.')
-#   destination_dir = '/usr/share/nginx/html/.well-known/acme-challenge/'
+if preferred_challenge == 'http-01'
+  raise "Use the dns-01 for wildcard certs" if domain.start_with?("*")
+  challenge, challenge_response = http_challenge, [http_challenge['token'], thumbprint].join('.')
+  destination_dir = '/usr/share/nginx/html/.well-known/acme-challenge/'
 
-#   IO.write('challenge.tmp', challenge_response)
-#   upload('challenge.tmp', destination_dir + http_challenge['token'])
-#   File.delete('challenge.tmp')
-# end
+  upload(challenge_response, destination_dir + http_challenge['token'])
+end
 
-# if preferred_challenge == 'dns-01'
-#   record_name = ('_acme-challenge.' + domain.sub(root_domain, '')).sub(/[.*]+\Z/, '')
-#   challenge, challenge_response = dns_challenge, [dns_challenge['token'], thumbprint].join('.')
-#   record_contents = base64_le(hash_algo.digest challenge_response)
+if preferred_challenge == 'dns-01'
+  record_name = ('_acme-challenge.' + domain.sub(root_domain, '')).sub(/[.*]+\Z/, '')
+  challenge, challenge_response = dns_challenge, [dns_challenge['token'], thumbprint].join('.')
+  record_contents = base64_le(hash_algo.digest challenge_response)
 
-#   dnsimple = Dnsimple::Client.new(username: ENV['DNSIMPLE_USERNAME'], api_token: ENV['DNSIMPLE_TOKEN'])
-#   challenge_record = dnsimple.domains.create_record(root_domain, record_type: 'TXT', name: record_name, content: record_contents, ttl: 60)
+  dnsimple = Dnsimple::Client.new(access_token: ENV['DNSIMPLE_ACCESS_TOKEN'])
+  account_id = dnsimple.identity.whoami.data.account.id
 
-#   puts "Waiting for DNS record to propogate"
-#   loop do
-#     resolved_record = Resolv::DNS.open { |r| r.getresources("#{record_name}.#{root_domain}", Resolv::DNS::Resource::IN::TXT) }[0]
-#     break if resolved_record && resolved_record.data == record_contents
+  challenge_record = dnsimple.zones.create_zone_record(account_id, root_domain, type: 'TXT', name: record_name, content: record_contents, ttl: 60)
 
-#     sleep 5
-#   end
-# end
+  puts "Waiting for DNS record to propogate"
+  loop do
+    resolved_record = Resolv::DNS.open { |r| r.getresources("#{record_name}.#{root_domain}", Resolv::DNS::Resource::IN::TXT) }[0]
+    break if resolved_record && resolved_record.data == record_contents
 
-# signed_request(challenge['url'], {
-#   keyAuthorization: challenge_response
-# }, kid)
+    sleep 5
+  end
+  dns_cleanup = Proc.new { dnsimple.zones.delete_zone_record(account_id, root_domain, challenge_record.data.id) }
+end
 
-# loop do
-#   challenge_result = HTTParty.get(challenge['url'])
+signed_request(challenge['url'], payload: {}, kid: kid)
 
-#   case challenge_result['status']
-#     when 'valid' then break
-#     when 'pending' then sleep 2
-#     else raise "Challenge attempt #{ challenge_result['status'] }: #{ challenge_result['error']['details'] }"
-#   end
-# end
+loop do
+  challenge_result = signed_request(challenge['url'], kid: kid)
 
-# dnsimple.domains.delete_record(root_domain, challenge_record.id) if defined?(:challenge_record)
+  case challenge_result['status']
+    when 'valid' then break
+    when 'pending' then sleep 2
+    else raise "Challenge attempt #{ challenge_result['status'] }: #{ challenge_result['error']['details'] }"
+  end
+end
 
-# domain_key = case certificate_type
-#   when 'rsa' then OpenSSL::PKey::RSA.new(4096)
-#   when 'ecdsa' then OpenSSL::PKey::EC.new('secp384r1').generate_key
-#   else raise 'Unknown certificate type'
-# end
+order = signed_request(order.headers['Location'], kid: kid)
+raise("Unexpect order status (should be ready)") unless order['status'] == 'ready'
 
-# domain_filename = domain.gsub('.', '-')
-# IO.write(domain_filename + '.key', domain_key.to_pem)
+dns_cleanup.call if defined?(:dns_cleanup)
 
-# csr = OpenSSL::X509::Request.new
-# csr.public_key = case certificate_type
-#   when 'rsa' then domain_key.public_key
-#   when 'ecdsa' then OpenSSL::PKey::EC.new(domain_key)
-# end
-# alt_name = OpenSSL::X509::ExtensionFactory.new.create_extension("subjectAltName", "DNS: #{ domain }")
-# extensions = OpenSSL::ASN1::Set([OpenSSL::ASN1::Sequence([alt_name])])
-# csr.add_attribute OpenSSL::X509::Attribute.new('extReq', extensions)
+domain_key = case certificate_type
+  when 'rsa' then OpenSSL::PKey::RSA.new(4096)
+  when 'ecdsa' then OpenSSL::PKey::EC.new('secp384r1').generate_key
+  else raise 'Unknown certificate type'
+end
 
-# csr.sign domain_key, hash_algo
+domain_filename = domain.gsub('.', '-').sub('*', 'wildcard')
+IO.write(domain_filename + '.key', domain_key.to_pem)
 
-# finalized_order = signed_request(order['finalize'], {
-#   csr: base64_le(csr.to_der),
-# }, kid)
+csr = OpenSSL::X509::Request.new
+csr.public_key = certificate_type == 'ecdsa' ? domain_key : domain_key.public_key
 
-# certificate = OpenSSL::X509::Certificate.new HTTParty.get(finalized_order['certificate']).body
+alt_name = OpenSSL::X509::ExtensionFactory.new.create_extension("subjectAltName", "DNS: #{ domain }")
+extensions = OpenSSL::ASN1::Set([OpenSSL::ASN1::Sequence([alt_name])])
+csr.add_attribute OpenSSL::X509::Attribute.new('extReq', extensions)
 
-# intermediate_cert_url = URI.join(DIRECTORY_URI, '../acme/issuer-cert')
-# intermediate = OpenSSL::X509::Certificate.new HTTParty.get(intermediate_cert_url).body
+csr.sign domain_key, hash_algo
 
-# IO.write(domain_filename + '-cert.pem', certificate.to_pem)
-# IO.write(domain_filename + '-chained.pem', [certificate.to_pem, intermediate].join("\n"))
+finalized_order = signed_request(order['finalize'], payload: {
+  csr: base64_le(csr.to_der),
+}, kid: kid)
+
+IO.write("#{ domain_filename }-cert.pem", signed_request(finalized_order['certificate'], kid: kid).body)
