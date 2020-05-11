@@ -93,9 +93,7 @@ order = signed_request(endpoints['newOrder'], payload: {
   }]
 }, kid: kid)
 
-challenges = order['authorizations'].flat_map do |auth_url|
-  signed_request(auth_url, kid: kid)['challenges']
-end
+challenges = signed_request(order['authorizations'].first, kid: kid)['challenges']
 challenge, challenge_response = nil, nil
 
 http_challenge, dns_challenge = ['http-01', 'dns-01'].map do |challenge_type|
