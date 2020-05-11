@@ -200,13 +200,6 @@ Base64.urlsafe_encode64('test')
 There is a small tweak we'll need to make to keep Let's Encrypt happy - removing the padding characters (`=`) from our encoded data:
 
 ```ruby
-Base64.urlsafe_encode64('test').delete('=')
- #=> "dGVzdA"
-```
-
-(Or in [Ruby 2.3+](http://ruby-doc.org/stdlib-2.3.0/libdoc/base64/rdoc/Base64.html#method-i-urlsafe_encode64))
-
-```ruby
 Base64.urlsafe_encode64('test', padding: false)
 ```
 
@@ -1914,6 +1907,14 @@ Alex Peattie / [alexpeattie.com](https://alexpeattie.com/) / [@alexpeattie](http
 <br>
 
 ## Changelog
+
+#### Version 2.0 - May 12 2020
+* Big update, rewrite the guide and client to conform to the new [V2 API](https://acme-v02.api.letsencrypt.org/)/[RFC 8555](https://tools.ietf.org/html/rfc8555)
+* Add support for wildcard certificates in the client and guide
+* Upgrade to Ruby 2.7
+* Migrate away from the legacy DNSimple API/gem
+* Add more detail on certificate revocation (including reason codes), and EC curves
+* Lots of other info updated, e.g. rate limit changes, LE root certificate becoming trusted
 
 #### Version 1.2 - Aug 7 2017
 * Add Appendix 7 explaining how to use EC client keys
