@@ -116,7 +116,7 @@ client_key = OpenSSL::PKey::RSA.new(IO.read(client_key_path), 'letmein')
 
 The first, and probably hardest step, is constructing requests in the very particular format that Let's Encrypt demands. It's important to remember though, that in principle, the Let's Encrypt API is the same as any other API.
 
-For example, using the <a href='https://developer.github.com/v3/' name='github-example'>Github API</a> I can programatically create an issue, by making a `POST` request to the target repo's `/issues` endpoint with a JSON payload that includes the issue title and body:
+For example, using the <a href='https://developer.github.com/v3/' name='github-example'>Github API</a> I can programmatically create an issue, by making a `POST` request to the target repo's `/issues` endpoint with a JSON payload that includes the issue title and body:
 
 ```json
 POST https://api.github.com/repos/alexpeattie/letsencrypt-fromscratch/issues
@@ -264,7 +264,7 @@ end
 
 (Currently LE [supports](https://github.com/letsencrypt/boulder/issues/1191#issuecomment-228087035) a few other signing algorithms: `ES256`, `ES384` and `ES512` - but `RS256` is by far the most popular choice. If you're interested in using elliptic curve signature algorithms - the `ES*` family - see [Appendix 7](#appendix-7-using-ec-client-keys)).
 
-Our choice of signing algorithm is one half of what LE will need to verify our signature - the other half is the **public part of our signing key**. There are two ways we'll bundle our public key into our protected header. When we set up our account for the first time, we'll send our public key as a JSON web key (JWK). JWK is a widely-used [standard] for sharing keys via JSON. Once we've registered our account and public key, LE will give use a unique key ID which we can use to reference our public key (which LE will store). For all subsequent requests, we'll just reference this key ID (`kid`).
+Our choice of signing algorithm is one half of what LE will need to verify our signature - the other half is the **public part of our signing key**. There are two ways we'll bundle our public key into our protected header. When we set up our account for the first time, we'll send our public key as a JSON web key (JWK). JWK is a widely-used [standard](https://tools.ietf.org/html/rfc7517) for sharing keys via JSON. Once we've registered our account and public key, LE will give use a unique key ID which we can use to reference our public key (which LE will store). For all subsequent requests, we'll just reference this key ID (`kid`).
 
 > :warning: V2 breaking change: the use of `kid` is one of the major departures from ACME V1. In V1 we'd send our JWK with each request, and `kid` didn't exist.
 
@@ -568,7 +568,7 @@ I mentioned above that we should avoid hard-coding the URLs our client uses - th
 
 (Note: unlike most of the API's endpoints, the directory is viewable without any kind of special signed request, you can just visit it [in your browser](https://acme-v02.api.letsencrypt.org/directory)).
 
-The camel-cased keys in the JSON object indicate the action (`newAccount` for account registration, `newOrder` to order a certificate etc.), and the values are the URI we'll need to make a signed request to. Even though [Cool URIs don't change](https://www.w3.org/Provider/Style/URI), using the directory means we don't have to hard-code the endpoints - and so our client is more resilient to any changes Let's Encrypt might make (credit to [@kelunik](https://github.com/kelunik) for suggesting this).
+The camel-cased keys in the JSON object indicate the action (`newAccount` for account registration, `newOrder` to order a certificate etc.), and the values are the URI we'll need to make a signed request to. Even though [Cool URIs don't change](https://www.w3.org/Provider/Style/URI), using the directory means we don't have to hard-code the endpoints - and so our client is more resilient to any changes Let's Encrypt might make (credit to [@kelunik](https://github.com/kelunik) for originally suggesting this).
 
 To avoid making repeated requests to the directory, let's make an `endpoints` method:
 
@@ -921,7 +921,7 @@ The `dns-01` challenge was introduced at [the beginning of 2016](https://letsenc
 - We'll add a DNS [TXT record](https://en.wikipedia.org/wiki/TXT_record) rather than uploading a file
 - Rather than using "raw" key authorization as the record's contents, we'll use its (Base64 encoded) SHA-256 digest (see below)
 
-There are lots of ways to add the required DNS record - most DNS services provide a web interface (instructions for common providers [here](http://help.campaignmonitor.com/topic.aspx?t=100#dns-providers)) - we'll be programatically adding a record using the [DNSimple API](https://developer.dnsimple.com/) & [associated gem](https://github.com/dnsimple/dnsimple-ruby).
+There are lots of ways to add the required DNS record - most DNS services provide a web interface (instructions for common providers [here](http://help.campaignmonitor.com/topic.aspx?t=100#dns-providers)) - we'll be programmatically adding a record using the [DNSimple API](https://developer.dnsimple.com/) & [associated gem](https://github.com/dnsimple/dnsimple-ruby).
 
 The key ingredients of a DNS record are its type, name and value/contents. The type of the record is `TXT`, which is designed for adding arbitrary text data to a DNS zone. The name of the record takes the format `_acme-challenge.subdomain.example.com`. The root domain name is appended to a record's name automatically, so we just need to provide the name as `_acme-challenge.subdomain` or just `_acme-challenge` if we're authorizing the root domain or issuing a wildcard certificate:
 
@@ -1092,7 +1092,7 @@ finalized_order = signed_request(order['finalize'], payload: {
 
 > :warning: V2 breaking change: previously, certificate issuance was done with a static "new certificate" endpoint, rather than the order's `"finalize"` URL
 
-We're given back a updated instance of our original order with a new `"certificate"` key. This URL points to our ready-to-use certificates, including all the necessary [intermediate certificates](https://letsencrypt.org/certificates/) - all we need to do is download it (using one last `GET`-as-`POST` request):
+We're given back an updated instance of our original order with a new `"certificate"` key. This URL points to our ready-to-use certificates, including all the necessary [intermediate certificates](https://letsencrypt.org/certificates/) - all we need to do is download it (using one last `GET`-as-`POST` request):
 
 ```ruby
 IO.write("certificate.pem", signed_request(finalized_order['certificate'], kid: kid).body)
@@ -1100,7 +1100,7 @@ IO.write("certificate.pem", signed_request(finalized_order['certificate'], kid: 
 
 > :information_source: V2 change: previously, we had to do much more work to get our certificate ready to use, manually coercing it into a valid PEM format and manually fetching the intermediate certificates. In V2, Let's Encrypt does all that for us and returns a valid `application/pem-certificate-chain` response.
 
-That's it - we're done with our client and have our certificate (valid for the next 90 days) that will be accepted by all major browsers :tada:! Completed authorizations are valid for 30 days, so we can our renew certificate without needing to take a challenge during that period.
+That's it - we're done with our client and have our certificate (valid for the next 90 days) that will be accepted by all major browsers :tada:! Completed authorizations are valid for 30 days, so we can renew our certificate without needing to take a challenge during that period.
 
 > :warning: V2 breaking change: completed authorizations used to be valid for much longer (300 days). And a word of caution even with the shortened 30 day grace period, as [Matt Nordhoff notes](https://community.letsencrypt.org/t/the-lifecycle-of-a-valid-authorization/101387/3) "an ACME client should always be prepared to validate again, rather than counting on authz reuse".
 
@@ -1308,7 +1308,7 @@ FF 44 | Chrome 48 | IE 11 | Safari 7.1 | iOS 8 (Safari) | Windows Phone 8.1 | An
 --- | --- | --- | --- | --- | --- | ---
 :no_entry: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :no_entry: | :no_entry: | :no_entry:
 
-As of V2, Let's Encrypt already issues us with a complete certificate chain - so we'd actually have to make an effort to omit the neccessary intermediate certificate.
+As of V2, Let's Encrypt already issues us with a complete certificate chain - so we'd actually have to make an effort to omit the necessary intermediate certificate.
 
 <br>
 
@@ -1419,7 +1419,7 @@ domains.zip(order['authorizations']).each do |domain, auth|
 end
 ```
 
-Once we've authorized all the subdomains we want to include in the certificate, we pass a comma seperated list of of DNS identifiers for our CSR's `subjectAltName`:
+Once we've authorized all the subdomains we want to include in the certificate, we pass a comma separated list of of DNS identifiers for our CSR's `subjectAltName`:
 
 ```ruby
 alt_names = domains.map { |domain| "DNS:#{domain}" }.join(', ')
@@ -1441,7 +1441,7 @@ That's all you need to get certificates to cover multiple host names. You can fi
 
 ## Appendix 5: Key size
 
-Broadly-speaking key size means how hard a key is to crack. Longer keys offer more security, but their bigger size leads to a somewhat slower TLS handshake.
+Broadly speaking, key size means how hard a key is to crack. Longer keys offer more security, but their bigger size leads to a somewhat slower TLS handshake.
 
 <p align='center'><a href='https://certsimple.com/blog/measuring-ssl-rsa-keys'><img src='https://user-images.githubusercontent.com/636814/81576687-767a5300-93a0-11ea-9b41-b6aed1dda26f.png' alt='SSL handshake speed at different key sizes'></a></p>
 
@@ -1842,7 +1842,7 @@ new_registration = signed_request(endpoints['revokeCert'], {
 })
 ```
 
-Note that you still need to provide the certificate in DER format, even if you're not providing the certificate's corresponding private key. You can always fetch the certificate programatically like so:
+Note that you still need to provide the certificate in DER format, even if you're not providing the certificate's corresponding private key. You can always fetch the certificate programmatically like so:
 
 ```ruby
 uri, certificate = URI.parse("https://example.com"), nil
