@@ -817,7 +817,7 @@ We can see our `"identifier"` is echoed back to us, along with the authorization
 - Provisioning a special DNS record for `dns-01`
 - Offering a specified temporary certificate for `tns-alpn-01` (not covered in this guide)
 
-When we created our `newOrder` we mentioned we'd be given one authorization URL for each identifier we provided. For the main tutorial we'll only handle the client sending a single domain/identifier (hence `order['authorizations'].first`) - see [Appendix 4](http://localhost:8887/#appendix-4-multiple-subdomains) for how we can extend our client to handle multiple identifiers. Next, we'll pick out our HTTP and DNS challenges:
+When we created our `newOrder` we mentioned we'd be given one authorization URL for each identifier we provided. For the main tutorial we'll only handle the client sending a single domain/identifier (hence `order['authorizations'].first`) - see [Appendix 4](#appendix-4-multiple-subdomains) for how we can extend our client to handle multiple identifiers. Next, we'll pick out our HTTP and DNS challenges:
 
 ```ruby
 challenges = signed_request(order['authorizations'].first, kid: kid)['challenges']
@@ -1133,7 +1133,7 @@ server {
 }
 ```
 
-That's theoretically all we need, but we can improve on nginx's defaults for better security and performance. We'll use the settings recommended by <https://cipherli.st/> (click "Yes, give me a ciphersuite that works with legacy / old software." if you need to support older browsers) and a couple of extra headers recommended by [securityheaders.io](https://securityheaders.io/). We'll use Google's DNS server (8.8.8.8) as our `resolver` (recommended for [OSCP stapling](https://en.wikipedia.org/wiki/OCSP_stapling) on nginx):
+That's theoretically all we need, but we can improve on nginx's defaults for better security and performance. We'll use the settings recommended by <https://syslink.pl/cipherlist/> (click "Yes, give me a ciphersuite that works with legacy / old software." if you need to support older browsers) and a couple of extra headers recommended by [securityheaders.io](https://securityheaders.io/). We'll use Google's DNS server (8.8.8.8) as our `resolver` (recommended for [OSCP stapling](https://en.wikipedia.org/wiki/OCSP_stapling) on nginx):
 
 ```nginx
 ssl_protocols TLSv1 TLSv1.1 TLSv1.2;
@@ -1157,7 +1157,7 @@ add_header Content-Security-Policy "default-src https: data: 'unsafe-inline' 'un
 
 We should keep the line enabling the `Strict-Transport-Security` header commented out until we're happy our HTTPS setup is working (as visitor's won't be able to access our non-HTTPS site once it's activated).
 
-We can harden our configuration by dropping support for TLS < v1.2 - although that does have implications for [supporting older browsers](https://en.wikipedia.org/wiki/Template:TLS/SSL_support_history_of_web_browsers). If we happy to target just older browsers, we should also allow only cipher suites with a minimum 256-bit key length for AES (the symmetric cipher):
+We can harden our configuration by dropping support for TLS < v1.2 - although that does have implications for [supporting older browsers](https://en.wikipedia.org/wiki/Transport_Layer_Security#Web_browsers). If we happy to target just older browsers, we should also allow only cipher suites with a minimum 256-bit key length for AES (the symmetric cipher):
 
 ```nginx
 ssl_protocols TLSv1.2;
@@ -1262,7 +1262,6 @@ Some other useful testing tools:
 
 - [revocationcheck.com](https://certificate.revocationcheck.com/) - Useful for debugging OSCP
 - [testssl.sh](https://testssl.sh/) and [cipherscan](https://github.com/jvehent/cipherscan) - Command line TLS testing tools
-- [SSL Decoder](https://ssldecoder.org) - Open-source tool for checking SSL/TLS config - gives lots of info, but no score per se.
 - [High-Tech Bridge SSL Server Security Test](https://www.htbridge.com/ssl/) - A decent alternative to SSL Labs's tool. Advocates weaker ciphers because of HIPAA guidance though.
 
 <br>
@@ -1448,7 +1447,7 @@ Broadly-speaking key size means how hard a key is to crack. Longer keys offer mo
 
 We don't have a very broad choice when it comes to choosing key size. 2048 bits has effectively been an [enforced minimum](https://www.cabforum.org/wp-content/uploads/Baseline_Requirements_V1.pdf) since the beginning of 2014; 4096 bits is the upper bound. 4096 bits is favored by some, but is far from the standard right now. It's anticipated that 2048-bit keys will be considered secure [until about 2030](http://www.keylength.com/en/4/).
 
-2048 is the default key size for [certbot](https://github.com/certbot/certbot#current-features). But you will need a 4096 bit key to score perfectly on the Key [SSL Labs' test](https://www.ssllabs.com/downloads/SSL_Server_Rating_Guide.pdf), and there are lively discussions advocating the LE default be raised to [4096](https://github.com/certbot/certbot/issues/489) or [3072](https://github.com/certbot/certbot/issues/2080). CertSimple did an [awesome, detailed rundown](https://certsimple.com/blog/measuring-ssl-rsa-keys) of the benefits of different key sizes, and basically concluded "it depends".
+2048 is the default key size for [certbot](https://github.com/certbot/certbot#current-features). But you will need a 4096 bit key to score perfectly on the Key [SSL Labs' test](https://github.com/ssllabs/research/wiki/SSL-Server-Rating-Guide), and there are lively discussions advocating the LE default be raised to [4096](https://github.com/certbot/certbot/issues/489) or [3072](https://github.com/certbot/certbot/issues/2080). CertSimple did an [awesome, detailed rundown](https://certsimple.com/blog/measuring-ssl-rsa-keys) of the benefits of different key sizes, and basically concluded "it depends".
 
 We will need a key size of 4096 bits to get a perfect SSL Labs score. Not all cloud providers support key sizes above 2048 bits though, AWS CloudFront being a notable example. If you want or need to use a 2048-bit key, you can specify the key length like so:
 
@@ -1869,10 +1868,10 @@ In other words, you'll need to create a new account, pass the challenges for the
 #### TLS/SSL in general
 
 - [Bulletproof SSL and TLS](https://www.feistyduck.com/books/bulletproof-ssl-and-tls/) - wonderful ~500 page book, goes into great detail about everything you might want to know about SSL/TLS
-- [SSL/TLS Deployment Best Practices (PDF)](https://www.ssllabs.com/downloads/SSL_TLS_Deployment_Best_Practices.pdf) - By the same author as *Bulletproof*, a quick 10 page checklist
+- [SSL/TLS Deployment Best Practices](https://github.com/ssllabs/research/wiki/SSL-and-TLS-Deployment-Best-Practices) - By the same author as *Bulletproof*, an up-to-date and thorough checklist
 - [TLS chapter in High Performance Browser Networking](http://chimera.labs.oreilly.com/books/1230000000545/ch04.html) - like the TL;DR of *Bulletproof*, covers all the fundamentals, plus more recent developments like OCSP stapling, HSTS etc.
 - [OWASP's TLS Cheat Sheet](https://www.owasp.org/index.php/Transport_Layer_Protection_Cheat_Sheet) - An excellent list of do's and don't relating to SSL/TLS
-- [Modern SSL/TLS Best Practices for Fast, Secure Websites](http://www.scmagazine.com/resource-library/resource/cloudflare/whitepaper/56cb65bced344a22f86cb85d/) (PDF, registration required) - decent white paper, with loads of visuals, up-to-date best practice recommendations
+- [Modern SSL/TLS Best Practices for Fast, Secure Websites](https://www.infosecurity-magazine.com/white-papers/ssltls-best-practices/) (PDF, registration required) - decent white paper, with loads of visuals, up-to-date best practice recommendations
 - [SSL Best Practices: a Quick and Dirty Guide](https://www.ssl.com/guide/ssl-best-practices-a-quick-and-dirty-guide/) - top-level, reasonably recent (2015) best practices guide.
 - [How does SSL/TLS work?](http://security.stackexchange.com/questions/20803/how-does-ssl-tls-work/20833#20833) - Good StackExchange answer
 - [TLS in HTTP/2](https://daniel.haxx.se/blog/2015/03/06/tls-in-http2/)
