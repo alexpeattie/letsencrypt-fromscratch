@@ -190,7 +190,7 @@ _t�
                 �%Ê�k��
 ```
 
-To avoid dealing with non-ASCII characters we'll need to [Base64 encode](https://en.wikipedia.org/wiki/Base64) most of our data. The good news is Ruby comes with Base64 handling as [part of the standard library](http://ruby-doc.org/stdlib-2.3.0/libdoc/base64/rdoc/Base64.html):
+To avoid dealing with non-ASCII characters we'll need to [Base64 encode](https://en.wikipedia.org/wiki/Base64) most of our data. The good news is Ruby comes with Base64 handling as [part of the standard library](https://ruby-doc.org/stdlib-2.7.1/libdoc/base64/rdoc/Base64.html):
 
 ```ruby
 Base64.urlsafe_encode64('test')
@@ -224,7 +224,7 @@ base64_le '{"contact":["mailto:me@alexpeattie.com"]}'
  #=> "eyJjb250YWN0IjpbIm1haWx0bzptZUBhbGV4cGVhdHRpZS5jb20iXX0"
  ```
 
-This a totally valid payload that we can send to Let's Encrypt. Obviously it'll be more convenient not to have to construct JSON strings by hand - so let's load in the [JSON library](http://ruby-doc.org/stdlib-2.3.0/libdoc/json/rdoc/JSON.html) (again part of the Ruby standard lib):
+This a totally valid payload that we can send to Let's Encrypt. Obviously it'll be more convenient not to have to construct JSON strings by hand - so let's load in the [JSON library](http://ruby-doc.org/stdlib-2.7.1/libdoc/json/rdoc/JSON.html) (again part of the Ruby standard lib):
 
 ```ruby
 require 'json'
@@ -270,7 +270,7 @@ Our choice of signing algorithm is one half of what LE will need to verify our s
 
 > :warning: V2 breaking change: the use of `kid` is one of the major departures from ACME V1. In V1 we'd send our JWK with each request, and `kid` didn't exist.
 
-Let's start with sending our public key as a JWK (which we'll do during account creation). The parts of the key we're interested in are the public key exponent (e) and the modulus (n). Helpfully our `client_key` has corresponding methods (`client_key.e` and `client_key.n`) - the only additionally steps we need to take are converting them to binary strings with `to_s(2)` ([documented here](http://ruby-doc.org/stdlib-2.3.0/libdoc/openssl/rdoc/OpenSSL/BN.html#to_s-method)), then (you guessed it), Base64 encoding them.
+Let's start with sending our public key as a JWK (which we'll do during account creation). The parts of the key we're interested in are the public key exponent (e) and the modulus (n). Helpfully our `client_key` has corresponding methods (`client_key.e` and `client_key.n`) - the only additionally steps we need to take are converting them to binary strings with `to_s(2)` ([documented here](http://ruby-doc.org/stdlib-2.7.1/libdoc/openssl/rdoc/OpenSSL/BN.html#to_s-method)), then (you guessed it), Base64 encoding them.
 
 We'll additionally have to specify the key type (`kty`) of `client_key` - in our case, it's an RSA key. We'll wrap everything in a `jwk` convenience method:
 
@@ -973,7 +973,7 @@ challenge_record = dnsimple.domains.create_record(account_id, 'alexpeattie.com',
 
 (If you see a `NoMethodError (undefined method 'id' for nil:NilClass)` on the `account_id` line, you might be using a user token rather than an account token).
 
-Lastly, we'll use Ruby's [Resolv](http://ruby-doc.org/stdlib-2.3.0/libdoc/resolv/rdoc/Resolv.html) library (part of the std lib) to wait until the challenge record's been added:
+Lastly, we'll use Ruby's [Resolv](http://ruby-doc.org/stdlib-2.7.1/libdoc/resolv/rdoc/Resolv.html) library (part of the Standard Library) to wait until the challenge record's been added:
 
 ```ruby
 loop do
@@ -1063,7 +1063,7 @@ IO.write('domain.key', domain_key.to_pem)
 
 **You might alternatively want to use a 2048 bit key (see [Appendix 5](#appendix-5-key-size) for more).*
 
-Next we turn to Ruby's `OpenSSL` module to [generate our CSR](http://ruby-doc.org/stdlib-2.3.0/libdoc/openssl/rdoc/OpenSSL.html#module-OpenSSL-label-Certificate+Signing+Request):
+Next we turn to Ruby's `OpenSSL` module to [generate our CSR](http://ruby-doc.org/stdlib-2.7.1/libdoc/openssl/rdoc/OpenSSL.html#module-OpenSSL-label-Certificate+Signing+Request):
 
 ```ruby
 csr = OpenSSL::X509::Request.new
