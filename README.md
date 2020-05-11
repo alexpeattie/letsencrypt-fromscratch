@@ -35,13 +35,14 @@ I've signposted any breaking (or notable) changes between V1 and V2 of the ACME 
 
   * [Loading our client key-pair](#1-loading-our-client-key-pair)
   * [Constructing a Let's Encrypt API request](#2-constructing-a-lets-encrypt-api-request)
-    * [Base64 all the things](#a-base64-all-the-things)
-    * [Payload](#b-payload)
-    * [Header](#c-header)
-    * [Protected header and the nonce](#d-protected-header-and-the-nonce)
-    * [Signature](#e-signature)
-    * [Making requests](#f-making-requests)
-    * [Fetching the endpoints](#g-fetching-the-endpoints)
+    * [The anatomy of a Let's Encrypt request](#a-the-anatomy-of-a-lets-encrypt-request)
+    * [Base64 all the things](#b-base64-all-the-things)
+    * [Payload](#c-payload)
+    * [Protected header](#d-protected-header)
+    * [Nonce](#e-nonce)
+    * [Signature](#f-signature)
+    * [Making requests](#g-making-requests)
+    * [Fetching the endpoints](#h-fetching-the-endpoints)
   * [Registering with Let's Encrypt](#3-registering-with-lets-encrypt)
     * [Responses](#responses)
   * [Passing the challenge](#4-passing-the-challenge)
@@ -52,8 +53,6 @@ I've signposted any breaking (or notable) changes between V1 and V2 of the ACME 
     * [Telling LE we've completed the challenge](#e-telling-le-weve-completed-the-challenge)
     * [Wait for LE to acknowledge the challenge has been passed](#f-wait-for-le-to-acknowledge-the-challenge-has-been-passed)
   * [Issuing the certificate :tada:](#5-issuing-the-certificate-tada)
-    * [Formatting tweaks](#formatting-tweaks)
-    * [Adding intermediates](#adding-intermediates)
 
 <hr>
 
@@ -62,7 +61,6 @@ I've signposted any breaking (or notable) changes between V1 and V2 of the ACME 
     * [Testing](#testing)
   * [Appendix 2: The trust chain & intermediate certificates](#appendix-2-the-trust-chain--intermediate-certificates)
     * [Missing certificate chain](#missing-certificate-chain)
-    * [LE root certificate](#le-root-certificate)
   * [Appendix 3: Our example site setup](#appendix-3-our-example-site-setup)
   * [Appendix 4: Multiple subdomains](#appendix-4-multiple-subdomains)
   * [Appendix 5: Key size](#appendix-5-key-size)
@@ -331,7 +329,7 @@ We're almost done, but there's one additional preventative method we'll use to p
 
 <br>
 
-#### d. The nonce
+#### e. Nonce
 
 To protect against replay attacks, we'll add in a [cryptographic nonce](https://en.wikipedia.org/wiki/Cryptographic_nonce). The linked articles go into lots of detail, but a nonce is basically a one-time use code which we must attach to our request. It means if an attacker somehow sniffs out a request we made, and makes a carbon-copy duplicate request, the attackers attempt will fail (because the nonce has already been used).
 
@@ -387,7 +385,7 @@ end
 
 <br>
 
-#### e. Signature
+#### f. Signature
 
 The last step to construct our request is to prove its authenticity with a **signature**, generated using our *client private key*. First, let's consolidate everything we have so far:
 
@@ -437,7 +435,7 @@ request = {
 }
 ```
 
-As mentioned [above](#c-header), we'll be using the SHA-256 hash function for our signing:
+As mentioned [above](#d-protected-header), we'll be using the SHA-256 hash function for our signing:
 
 ```ruby
 hash_algo = OpenSSL::Digest::SHA256.new
@@ -451,7 +449,7 @@ request[:signature] = client_key.sign(hash_algo, [ request[:protected], request[
 
 <br>
 
-#### f. Making requests
+#### g. Making requests
 
 > :warning: V2 breaking change: the LE API requires the correct Content-Type in POST requests as of March 2018.
 
@@ -544,7 +542,7 @@ end
 ```
 <br>
 
-#### g. Fetching the endpoints
+#### h. Fetching the endpoints
 
 I mentioned above that we should avoid hard-coding the URLs our client uses - the best-practice is to instead a special `/directory` endpoint. This directory lists all the key endpoints we'll need to get started with our key actions (registering a user, authorizing a domain, issuing a certificate etc.):
 
@@ -912,7 +910,7 @@ destination_dir = '/usr/share/nginx/html/.well-known/acme-challenge/'
 upload(http_challenge_response, destination_dir + http_challenge['token'])
 ```
 
-Our simple nginx setup (see [Appendix 3]((#appendix-3-our-example-site-setup))) serves static files (if they exist) for any endpoint, so this should be all we need to ensure that a request to `http://le.alexpeattie.com/.well-known/acme-challenge/w2iwBwQq2ByOTEBm6oWtq5nNydu3Oe0tU_H24X-8J10` returns our key authorization as its response (we could easily test this by going to the URL in a browser).
+Our simple nginx setup (see [Appendix 3](#appendix-3-our-example-site-setup)) serves static files (if they exist) for any endpoint, so this should be all we need to ensure that a request to `http://le.alexpeattie.com/.well-known/acme-challenge/w2iwBwQq2ByOTEBm6oWtq5nNydu3Oe0tU_H24X-8J10` returns our key authorization as its response (we could easily test this by going to the URL in a browser).
 
 <br>
 
@@ -1102,7 +1100,7 @@ IO.write("certificate.pem", signed_request(finalized_order['certificate'], kid: 
 
 > :information_source: V2 change: previously, we had to do much more work to get our certificate ready to use, manually coercing it into a valid PEM format and manually fetching the intermediate certificates. In V2, Let's Encrypt does all that for us and returns a valid `application/pem-certificate-chain` response.
 
-That's it - we're done with our client and have our certificate (valid for the next 90 days) that will be accepted by all major browsers :white_check_mark:! Completed authorizations are valid for 30 days, so we can our renew certificate without needing to take a challenge during that period.
+That's it - we're done with our client and have our certificate (valid for the next 90 days) that will be accepted by all major browsers :tada:! Completed authorizations are valid for 30 days, so we can our renew certificate without needing to take a challenge during that period.
 
 > :warning: V2 breaking change: completed authorizations used to be valid for much longer (300 days). And a word of caution even with the shortened 30 day grace period, as [Matt Nordhoff notes](https://community.letsencrypt.org/t/the-lifecycle-of-a-valid-authorization/101387/3) "an ACME client should always be prepared to validate again, rather than counting on authz reuse".
 
@@ -1446,7 +1444,7 @@ That's all you need to get certificates to cover multiple host names. You can fi
 
 Broadly-speaking key size means how hard a key is to crack. Longer keys offer more security, but their bigger size leads to a somewhat slower TLS handshake.
 
-<p align='center'><a href='https://certsimple.com/blog/measuring-ssl-rsa-keys'><img src='https://certsimple.com/images/blog/measuring-rsa-keys/handshake-speed.png' alt='SSL handshake speed at different key sizes'></a></p>
+<p align='center'><a href='https://certsimple.com/blog/measuring-ssl-rsa-keys'><img src='https://user-images.githubusercontent.com/636814/81576687-767a5300-93a0-11ea-9b41-b6aed1dda26f.png' alt='SSL handshake speed at different key sizes'></a></p>
 
 We don't have a very broad choice when it comes to choosing key size. 2048 bits has effectively been an [enforced minimum](https://www.cabforum.org/wp-content/uploads/Baseline_Requirements_V1.pdf) since the beginning of 2014; 4096 bits is the upper bound. 4096 bits is favored by some, but is far from the standard right now. It's anticipated that 2048-bit keys will be considered secure [until about 2030](http://www.keylength.com/en/4/).
 
