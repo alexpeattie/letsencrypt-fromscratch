@@ -140,10 +140,10 @@ loop do
   end
 end
 
+dns_cleanup.call if defined?(:dns_cleanup)
+
 order = signed_request(order.headers['Location'], kid: kid)
 raise("Unexpect order status (should be ready)") unless order['status'] == 'ready'
-
-dns_cleanup.call if defined?(:dns_cleanup)
 
 domain_key = case certificate_type
   when 'rsa' then OpenSSL::PKey::RSA.new(4096)
@@ -157,7 +157,7 @@ IO.write(domain_filename + '.key', domain_key.to_pem)
 csr = OpenSSL::X509::Request.new
 csr.public_key = certificate_type == 'ecdsa' ? domain_key : domain_key.public_key
 
-alt_name = OpenSSL::X509::ExtensionFactory.new.create_extension("subjectAltName", "DNS: #{ domain }")
+alt_name = OpenSSL::X509::ExtensionFactory.new.create_extension("subjectAltName", "DNS:#{ domain }")
 extensions = OpenSSL::ASN1::Set([OpenSSL::ASN1::Sequence([alt_name])])
 csr.add_attribute OpenSSL::X509::Attribute.new('extReq', extensions)
 
