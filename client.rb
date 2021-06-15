@@ -143,7 +143,7 @@ end
 dns_cleanup.call if defined?(:dns_cleanup)
 
 order = signed_request(order.headers['Location'], kid: kid)
-raise("Unexpect order status (should be ready)") unless order['status'] == 'ready'
+raise("Unexpected order status (should be ready)") unless order['status'] == 'ready'
 
 domain_key = case certificate_type
   when 'rsa' then OpenSSL::PKey::RSA.new(4096)
