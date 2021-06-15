@@ -1,6 +1,7 @@
 # Building a Let's Encrypt client from scratch
 
 #### A step-by-step guide to building a LE/ACME client in <150 lines of code
+
 <p align='center'><img src='https://letsencrypt.org/images/letsencrypt-logo-horizontal.svg'></p>
 
 This is a (pretty detailed) how-to on building a simple ACME client from scratch, able to issue real certificates from [Let's Encrypt](https://letsencrypt.org). I've skipped things like error handling, object orientedness, tests - but not much tweaking would be needed for the client to be production-ready.
@@ -33,47 +34,47 @@ I've signposted any breaking (or notable) changes between V1 and V2 of the ACME 
 
 ## Table of Contents
 
-  * [Loading our client key-pair](#1-loading-our-client-key-pair)
-  * [Constructing a Let's Encrypt API request](#2-constructing-a-lets-encrypt-api-request)
-    * [The anatomy of a Let's Encrypt request](#a-the-anatomy-of-a-lets-encrypt-request)
-    * [Base64 all the things](#b-base64-all-the-things)
-    * [Payload](#c-payload)
-    * [Protected header](#d-protected-header)
-    * [Nonce](#e-nonce)
-    * [Signature](#f-signature)
-    * [Making requests](#g-making-requests)
-    * [Fetching the endpoints](#h-fetching-the-endpoints)
-  * [Registering with Let's Encrypt](#3-registering-with-lets-encrypt)
-    * [Responses](#responses)
-  * [Passing the challenge](#4-passing-the-challenge)
-    * [Asking Let's Encrypt for the challenges](#a-asking-lets-encrypt-for-the-challenges)
-    * [Let's Encrypt gives us our challenges](#b-lets-encrypt-gives-us-our-challenges)
-    * [Option 1: Completing the `http-01` challenge](#c-option-1-completing-the-http-01-challenge)
-    * [Option 2: Completing the `dns-01` challenge](#d-option-2-completing-the-dns-01-challenge)
-    * [Telling LE we've completed the challenge](#e-telling-le-weve-completed-the-challenge)
-    * [Wait for LE to acknowledge the challenge has been passed](#f-wait-for-le-to-acknowledge-the-challenge-has-been-passed)
-  * [Issuing the certificate :tada:](#5-issuing-the-certificate-tada)
+- [Loading our client key-pair](#1-loading-our-client-key-pair)
+- [Constructing a Let's Encrypt API request](#2-constructing-a-lets-encrypt-api-request)
+  - [The anatomy of a Let's Encrypt request](#a-the-anatomy-of-a-lets-encrypt-request)
+  - [Base64 all the things](#b-base64-all-the-things)
+  - [Payload](#c-payload)
+  - [Protected header](#d-protected-header)
+  - [Nonce](#e-nonce)
+  - [Signature](#f-signature)
+  - [Making requests](#g-making-requests)
+  - [Fetching the endpoints](#h-fetching-the-endpoints)
+- [Registering with Let's Encrypt](#3-registering-with-lets-encrypt)
+  - [Responses](#responses)
+- [Passing the challenge](#4-passing-the-challenge)
+  - [Asking Let's Encrypt for the challenges](#a-asking-lets-encrypt-for-the-challenges)
+  - [Let's Encrypt gives us our challenges](#b-lets-encrypt-gives-us-our-challenges)
+  - [Option 1: Completing the `http-01` challenge](#c-option-1-completing-the-http-01-challenge)
+  - [Option 2: Completing the `dns-01` challenge](#d-option-2-completing-the-dns-01-challenge)
+  - [Telling LE we've completed the challenge](#e-telling-le-weve-completed-the-challenge)
+  - [Wait for LE to acknowledge the challenge has been passed](#f-wait-for-le-to-acknowledge-the-challenge-has-been-passed)
+- [Issuing the certificate :tada:](#5-issuing-the-certificate-tada)
 
 <hr>
 
-  * [Appendix 1: Installing and testing the certificate](#appendix-1-installing-and-testing-the-certificate)
-    * [Installation (with nginx)](#installation-with-nginx)
-    * [Testing](#testing)
-  * [Appendix 2: The trust chain & intermediate certificates](#appendix-2-the-trust-chain--intermediate-certificates)
-    * [Missing certificate chain](#missing-certificate-chain)
-  * [Appendix 3: Our example site setup](#appendix-3-our-example-site-setup)
-  * [Appendix 4: Multiple subdomains](#appendix-4-multiple-subdomains)
-  * [Appendix 5: Key size](#appendix-5-key-size)
-    * [ECDSA keys](#ecdsa-keys)
-  * [Appendix 6: IDN support](#appendix-6-idn-support)
-  * [Appendix 7: Using EC client keys](#appendix-7-using-ec-client-keys)
-  * [Appendix 8: Certificate expiry and revocation](#appendix-8-certificate-expiry-and-revocation)
-  * [Further reading](#further-reading)
-    * [TLS/SSL in general](#tlsssl-in-general)
-    * [Let's Encrypt](#lets-encrypt)
-  * [Image credits](#image-credits)
-  * [Author](#author)
-  * [Changelog](#changelog)
+- [Appendix 1: Installing and testing the certificate](#appendix-1-installing-and-testing-the-certificate)
+  - [Installation (with nginx)](#installation-with-nginx)
+  - [Testing](#testing)
+- [Appendix 2: The trust chain & intermediate certificates](#appendix-2-the-trust-chain--intermediate-certificates)
+  - [Missing certificate chain](#missing-certificate-chain)
+- [Appendix 3: Our example site setup](#appendix-3-our-example-site-setup)
+- [Appendix 4: Multiple subdomains](#appendix-4-multiple-subdomains)
+- [Appendix 5: Key size](#appendix-5-key-size)
+  - [ECDSA keys](#ecdsa-keys)
+- [Appendix 6: IDN support](#appendix-6-idn-support)
+- [Appendix 7: Using EC client keys](#appendix-7-using-ec-client-keys)
+- [Appendix 8: Certificate expiry and revocation](#appendix-8-certificate-expiry-and-revocation)
+- [Further reading](#further-reading)
+  - [TLS/SSL in general](#tlsssl-in-general)
+  - [Let's Encrypt](#lets-encrypt)
+- [Image credits](#image-credits)
+- [Author](#author)
+- [Changelog](#changelog)
 
 ## 1. Loading our client key-pair
 
@@ -220,7 +221,7 @@ The **payload** will differ for each request - it's where we put any information
 ```ruby
 base64_le '{"contact":["mailto:me@alexpeattie.com"]}'
  #=> "eyJjb250YWN0IjpbIm1haWx0bzptZUBhbGV4cGVhdHRpZS5jb20iXX0"
- ```
+```
 
 This a totally valid payload that we can send to Let's Encrypt. Obviously it'll be more convenient not to have to construct JSON strings by hand - so let's load in the [JSON library](http://ruby-doc.org/stdlib-2.7.1/libdoc/json/rdoc/JSON.html) (again part of the Ruby standard lib):
 
@@ -387,7 +388,7 @@ end
 
 #### f. Signature
 
-The last step to construct our request is to prove its authenticity with a **signature**, generated using our *client private key*. First, let's consolidate everything we have so far:
+The last step to construct our request is to prove its authenticity with a **signature**, generated using our _client private key_. First, let's consolidate everything we have so far:
 
 ```ruby
 require 'openssl'
@@ -540,6 +541,7 @@ def signed_request(url, payload: '', kid: nil)
   HTTParty.post(url, body: JSON.dump(request))
 end
 ```
+
 <br>
 
 #### h. Fetching the endpoints
@@ -550,9 +552,7 @@ I mentioned above that we should avoid hard-coding the URLs our client uses - th
 {
   "keyChange": "https://acme-v02.api.letsencrypt.org/acme/key-change",
   "meta": {
-    "caaIdentities": [
-      "letsencrypt.org"
-    ],
+    "caaIdentities": ["letsencrypt.org"],
     "termsOfService": "https://letsencrypt.org/documents/LE-SA-v1.2-November-15-2017.pdf",
     "website": "https://letsencrypt.org"
   },
@@ -608,7 +608,7 @@ OK, we've laid the foundations - let's make our first actual request to the Let'
 
 First, we should ensure the user has read and accepted the Let's Encrypt [Terms of Service](https://letsencrypt.org/documents/LE-SA-v1.2-November-15-2017.pdf). We can skip this skip if we want to be naughty, but [per the ACME spec](https://tools.ietf.org/html/rfc8555#section-7.3):
 
-> Clients SHOULD NOT automatically agree to terms by default.  Rather, they SHOULD require some user interaction for agreement to terms.
+> Clients SHOULD NOT automatically agree to terms by default. Rather, they SHOULD require some user interaction for agreement to terms.
 
 For our user interaction, we'll just print the ToS URL and get the user to confirm they're happy. We can grab the latest terms URL from the directory (under `meta.termsOfService`):
 
@@ -710,11 +710,11 @@ Note that our account URL (`kid`) is again sent to us in the `Location` header -
 
 The next step is to inform Let's Encrypt which domain or subdomain we to provision a certificate for. In this guide I'm using the example **le.alexpeattie.com**. This is the first part of a multistep verification process to prove we're the legitimate owner of the domain:
 
-  - [a).](#a-placing-our-order-with-lets-encrypt) We place an order with LE
-  - [b).](#b-lets-encrypt-gives-us-our-challenges) LE gives us a challenge to prove we control the domain
-  - [c)](#c-option-1-completing-the-http-01-challenge) or [d).](#d-option-2-completing-the-dns-01-challenge) We complete the HTTP- or DNS-based challenge, and notify LE that we're ready
-  - [e).](#e-telling-le-weve-completed-the-challenge) LE checks the challenge has been completed to it's satisfaction
-  - [f).](#f-wait-for-le-to-acknowledge-the-challenge-has-been-passed) We verify that LE is happy the challenge has been passed :trophy:
+- [a).](#a-placing-our-order-with-lets-encrypt) We place an order with LE
+- [b).](#b-lets-encrypt-gives-us-our-challenges) LE gives us a challenge to prove we control the domain
+- [c)](#c-option-1-completing-the-http-01-challenge) or [d).](#d-option-2-completing-the-dns-01-challenge) We complete the HTTP- or DNS-based challenge, and notify LE that we're ready
+- [e).](#e-telling-le-weve-completed-the-challenge) LE checks the challenge has been completed to it's satisfaction
+- [f).](#f-wait-for-le-to-acknowledge-the-challenge-has-been-passed) We verify that LE is happy the challenge has been passed :trophy:
 
 <br>
 
@@ -726,7 +726,7 @@ Challenges are how we prove a sufficient level of control over the identifier (d
 
 #### a. Placing our order with Let's Encrypt
 
-Asking LE to begin the process of certificate issuance is just a case of making another request to the LE API - this time to create a `newOrder`. 
+Asking LE to begin the process of certificate issuance is just a case of making another request to the LE API - this time to create a `newOrder`.
 
 > :warning: V2 breaking change: we used to instead create an authorization directly. Now we create an order, and LE sends us a link to the authorization(s).
 
@@ -846,7 +846,7 @@ The `"type"` of the challenge is already familiar. The challenge's `"status"` wi
 
 #### c. Option 1: Completing the `http-01` challenge
 
-Our first option is the `http-01` challenge. To pass this we need to ensure that when LE makes a request to 
+Our first option is the `http-01` challenge. To pass this we need to ensure that when LE makes a request to
 
 `http://<< Domain >>/.well-known/acme-challenge/<< Challenge token >>`
 
@@ -860,14 +860,14 @@ Since our challenge relies on a static URL which incorporates our domain exactly
 
 First we'll create our **key authorization**: the special response LE expects to be served. It's quite simple - it's the challenge token and a 'thumbprint' of our public key joined with a period.
 
-We're using the JSON Web Key standard to share details of our public key already (in the `jwk` field of our header). To generate the thumbprint we need to generate a digest of that JSON using `SHA256`, and Base64 encode it (see [RFC 7638](https://tools.ietf.org/html/rfc7638) for more).
+We're using the JSON Web Key standard to share details of our public key already (in the `jwk` field of our header). To generate the thumbprint we need to generate a digest of our JSON Web Key using `SHA256`, and Base64 encode it (see [RFC 7638](https://tools.ietf.org/html/rfc7638) for more).
 
 Our final code for the `thumbprint` method looks like this:
 
 ```ruby
 def thumbprint
-  jwk = JSON.dump(header[:jwk])
-  thumbprint = base64_le(hash_algo.digest jwk)
+  key_digest = Digest::SHA256.digest(JSON.dump(jwk))
+  base64_le(key_digest)
 end
 ```
 
@@ -1024,7 +1024,7 @@ As a final sanity check, let's re-request our original order. We should now see 
 
 ```ruby
 order = signed_request(order.headers['Location'], kid: kid)
-raise("Unexpect order status (should be ready)") unless order['status'] == 'ready'
+raise("Unexpected order status (should be ready)") unless order['status'] == 'ready'
 ```
 
 ```json
@@ -1059,7 +1059,7 @@ domain_key = OpenSSL::PKey::RSA.new(4096)
 IO.write('domain.key', domain_key.to_pem)
 ```
 
-**You might alternatively want to use a 2048 bit key (see [Appendix 5](#appendix-5-key-size) for more).*
+\*_You might alternatively want to use a 2048 bit key (see [Appendix 5](#appendix-5-key-size) for more)._
 
 Next we turn to Ruby's `OpenSSL` module to [generate our CSR](http://ruby-doc.org/stdlib-2.7.1/libdoc/openssl/rdoc/OpenSSL.html#module-OpenSSL-label-Certificate+Signing+Request):
 
@@ -1268,7 +1268,7 @@ Some other useful testing tools:
 
 ## Appendix 2: The trust chain & intermediate certificates
 
-The trusted status of a certificate (what gives us the green padlock) stems from a relatively small set of trusted Certificate Authorities (CAs) with corresponding "Root certificates". These are stored in the "trust stores" of browsers or operating systems. We can see Mac OS's trusted roots by going to *Keychain Access* -> *System Roots* for example:
+The trusted status of a certificate (what gives us the green padlock) stems from a relatively small set of trusted Certificate Authorities (CAs) with corresponding "Root certificates". These are stored in the "trust stores" of browsers or operating systems. We can see Mac OS's trusted roots by going to _Keychain Access_ -> _System Roots_ for example:
 
 If our certificate has been issued by a trusted CA (in our trust store) that certificate is trusted. If the CA isn't in our trust store, we can check if certificate of **that** CA was issued by a trusted root CA. A certificate issued by a CA, issued by another CA which was issued by a trusted CA is trusted, and so on. The trust chain can involve as many untrusted or "intermediate" CAs as we want, as long as it ultimately goes back to a trusted (root CA).
 
@@ -1278,7 +1278,7 @@ If it's still unclear, imagine Alice & Bob are having a birthday party. Guests w
 - Doug ← invited by Steve ← invited by Alice = trusted :white_check_mark:
 - Fred ← invited by Gerard ← invited by Eve = untrusted :no_entry:
 
-At the party, a guest would have to provide information so we could verify the chain of invites led back to Alice or Bob. In the same way, a certificate should provide information about the chain of certificates (called the trust chain) which lead back to a trusted root CA. 
+At the party, a guest would have to provide information so we could verify the chain of invites led back to Alice or Bob. In the same way, a certificate should provide information about the chain of certificates (called the trust chain) which lead back to a trusted root CA.
 
 Let's Encrypt has it's own root CA: [ISRG Root X1](https://letsencrypt.org/certificates/), which is now [widely trusted](https://letsencrypt.org/2018/08/06/trusted-by-all-major-root-programs.html) by browsers and operating systems. Since trusted root certificates are so powerful, it's best practice to directly sign certificates with them sparingly - instead LE will use their root certificate to sign an "intermediate certificate", which will then sign certificates for end-users. So our chain looks like this:
 
@@ -1288,25 +1288,25 @@ So our complete trust chain should include our certificate, the [certificate of 
 
 > Because certificate validation requires that root keys be distributed independently, the self-signed certificate which specifies the root certificate authority may optionally be omitted from the chain, under the assumption that the remote end must already possess it in order to validate it in any case.
 
-So basically we just need to concatenate our certificate with Let's Encrypt CA's certificate and we have a complete chain of trust* :+1:.
+So basically we just need to concatenate our certificate with Let's Encrypt CA's certificate and we have a complete chain of trust\* :+1:.
 
-FF 44 | Chrome 48 | IE 11 | Safari 7.1 | iOS 8 (Safari) | Windows Phone 8.1 | Android 6
---- | --- | --- | --- | --- | --- | ---
-:white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark:
+| FF 44              | Chrome 48          | IE 11              | Safari 7.1         | iOS 8 (Safari)     | Windows Phone 8.1  | Android 6          |
+| ------------------ | ------------------ | ------------------ | ------------------ | ------------------ | ------------------ | ------------------ |
+| :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
 
-**Some servers (like Apache) might want us to provide the our certificate and the rest of the trust chain separately. In this case the rest of the chain would just be the LE intermediate certificate.*
+\*_Some servers (like Apache) might want us to provide the our certificate and the rest of the trust chain separately. In this case the rest of the chain would just be the LE intermediate certificate._
 
 #### Missing certificate chain
 
-If we were only to provide our certificate without LE's intermediate certificate, we have a **broken chain of trust**. Most browsers can actually recover from this. LE certificates leverage *Authority Information Access* which embeds information about the trust chain even if we (system admins) forget to provide it.
+If we were only to provide our certificate without LE's intermediate certificate, we have a **broken chain of trust**. Most browsers can actually recover from this. LE certificates leverage _Authority Information Access_ which embeds information about the trust chain even if we (system admins) forget to provide it.
 
 We shouldn't rely on this though, most mobile browsers don't support AIA - nor does Firefox (who have explicitly said they [won't be adding it](https://bugzilla.mozilla.org/show_bug.cgi?id=399324)).
 
 Here's the result you'll get without providing the intermediate certificate:
 
-FF 44 | Chrome 48 | IE 11 | Safari 7.1 | iOS 8 (Safari) | Windows Phone 8.1 | Android 6
---- | --- | --- | --- | --- | --- | ---
-:no_entry: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :no_entry: | :no_entry: | :no_entry:
+| FF 44      | Chrome 48          | IE 11              | Safari 7.1         | iOS 8 (Safari) | Windows Phone 8.1 | Android 6  |
+| ---------- | ------------------ | ------------------ | ------------------ | -------------- | ----------------- | ---------- |
+| :no_entry: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :no_entry:     | :no_entry:        | :no_entry: |
 
 As of V2, Let's Encrypt already issues us with a complete certificate chain - so we'd actually have to make an effort to omit the necessary intermediate certificate.
 
@@ -1399,7 +1399,7 @@ Once we've been issued our certificate, we can install it following [the steps i
 
 Let's Encrypt can issue a single certificates which cover multiple, using the [SubjectAltName extension](https://en.wikipedia.org/wiki/SubjectAltName). At the time of writing, Let's Encrypt supports a maximum of 100 SANs per certificate (full LE rate limits are detailed [here](https://letsencrypt.org/docs/rate-limits/)).
 
-LE has quite conservative per-domain rate limits right now (20 distinct certificates per domain per week) - so using SANs is crucial if you have lots of subdomains to secure*.
+LE has quite conservative per-domain rate limits right now (20 distinct certificates per domain per week) - so using SANs is crucial if you have lots of subdomains to secure\*.
 
 A common use-case is having a single certificate cover the naked domain and `www.` prefix. We have to authorize both domains; LE doesn't take it for granted that if we control the root domain we also control the `www.` subdomain or vice-versa.
 
@@ -1435,7 +1435,7 @@ csr.add_attribute OpenSSL::X509::Attribute.new(
 
 That's all you need to get certificates to cover multiple host names. You can find the full code of the example in [`multiple_subdomains.rb`](https://github.com/alexpeattie/letsencrypt-fromscratch/blob/master/multiple_subdomains.rb).
 
-**If you're running a site that, say, assigns thousands of subdomains to end users, you may be out of luck since "you can [only] issue certificates containing up to 2,000 unique subdomains per week" ([source](https://letsencrypt.org/docs/rate-limits/)). The only current work-around is to get your domain added to [Public Suffix list](https://publicsuffix.org/) - which LE treats as a [special case](https://github.com/letsencrypt/boulder/issues/1374). You'll need to issue a wildcard certificate instead.*
+\*_If you're running a site that, say, assigns thousands of subdomains to end users, you may be out of luck since "you can [only] issue certificates containing up to 2,000 unique subdomains per week" ([source](https://letsencrypt.org/docs/rate-limits/)). The only current work-around is to get your domain added to [Public Suffix list](https://publicsuffix.org/) - which LE treats as a [special case](https://github.com/letsencrypt/boulder/issues/1374). You'll need to issue a wildcard certificate instead._
 
 <br>
 
@@ -1471,9 +1471,9 @@ csr.public_key = domain_key
 csr.sign domain_key, OpenSSL::Digest::SHA256.new
 ```
 
-ECDSA is pretty well supported: Windows Vista and up, OS X 10.9, Android 3 and iOS 7*
+ECDSA is pretty well supported: Windows Vista and up, OS X 10.9, Android 3 and iOS 7\*
 
-**Source: [CertSimple: What web developers should know about SSL but probably don't](https://certsimple.com/blog/obsolete-cipher-suite-and-things-web-developers-should-know-about-ssl)*
+\*_Source: [CertSimple: What web developers should know about SSL but probably don't](https://certsimple.com/blog/obsolete-cipher-suite-and-things-web-developers-should-know-about-ssl)_
 
 <br>
 
@@ -1503,7 +1503,7 @@ openssl ecparam -genkey -name prime256v1 -noout -out ec-private.pem
 openssl ec -in ec-private.pem -pubout -out ec-public.pem
 ```
 
-Then, we'll need to change our `client_key` method to load our EC private key. 
+Then, we'll need to change our `client_key` method to load our EC private key.
 
 ```ruby
 OpenSSL::PKey::EC.new IO.read(client_key_path)
@@ -1514,7 +1514,7 @@ Simple enough so far, unfortunately, things begin to get a bit complicated. For 
 With EC keys though, we'll use a different hashing algorithm depending on the curve used/key length (different curves = different key lengths):
 
 | Algorithm | Curve name (JWK) | Curve name (OpenSSL)          | Key length (bits) | Hashing algorithm |
-|-----------|------------------|-------------------------------|-------------------|-------------------|
+| --------- | ---------------- | ----------------------------- | ----------------- | ----------------- |
 | ES256     | P-256            | `prime256v1` (or `secp256r1`) | 256               | SHA-256           |
 | ES384     | P-384            | `secp384r1`                   | 384               | SHA-384           |
 | ES512     | P-521            | `secp521r1`                   | 521               | SHA-512           |
@@ -1656,7 +1656,7 @@ def jwk
 end
 ```
 
-Worn out yet :sweat_smile:? There's one last step: we have to update how our signature is generated. When we sign a value using RSA, the signature is a single value `σ`, which is really just one long integer (see [Digital signature](https://en.wikipedia.org/wiki/Digital_signature#How_they_work) on Wikipedia). But DSA (which we use with EC keys) returns *a pair* of integers, typically denoted `r` and `s` (see Wikipedia's [DSA](https://en.wikipedia.org/wiki/Digital_Signature_Algorithm#Signing) article), so we'll need to make a few modifications to allow for this. We sign as normal:
+Worn out yet :sweat_smile:? There's one last step: we have to update how our signature is generated. When we sign a value using RSA, the signature is a single value `σ`, which is really just one long integer (see [Digital signature](https://en.wikipedia.org/wiki/Digital_signature#How_they_work) on Wikipedia). But DSA (which we use with EC keys) returns _a pair_ of integers, typically denoted `r` and `s` (see Wikipedia's [DSA](https://en.wikipedia.org/wiki/Digital_Signature_Algorithm#Signing) article), so we'll need to make a few modifications to allow for this. We sign as normal:
 
 ```ruby
 signature = client_key.sign(hash_algo, [request[:protected], request[:payload]].join('.'))
@@ -1764,7 +1764,7 @@ Accordingly, most commercial providers offer certificates with 1, 2 or 3 year va
 - Offering free certificates with a shorter lifetime provides encouragement for operators to automate issuance.
 - Let's Encrypt's total capacity is bound by its OCSP signing capacity, and LE is required to sign OCSP responses for each certificate until it expires. Shorter expiry period means less overhead for certificates that were issued and then discarded, which in turn means higher total issuance capacity.
 
-*(Source: [Pros and cons of 90-day certificate lifetimes](https://community.letsencrypt.org/t/pros-and-cons-of-90-day-certificate-lifetimes/4621))*
+_(Source: [Pros and cons of 90-day certificate lifetimes](https://community.letsencrypt.org/t/pros-and-cons-of-90-day-certificate-lifetimes/4621))_
 
 Let's Encrypt will send email reminders to the address(es) provided in the `contacts` field of your `newAccount` payload, at the following times:
 
@@ -1815,7 +1815,7 @@ new_registration = signed_request(endpoints['revokeCert'], {
 Reason codes are defined in [RFC 5280](https://tools.ietf.org/html/rfc5280#section-5.3.1) although only a subset are valid for use with LE, as summarized below:
 
 | Code | Reason                 | Valid for LE?      |
-|------|------------------------|--------------------|
+| ---- | ---------------------- | ------------------ |
 | 0    | Unspecified            | :white_check_mark: |
 | 1    | Key compromise         | :white_check_mark: |
 | 2    | CA compromise          | :no_entry:         |
@@ -1868,8 +1868,8 @@ In other words, you'll need to create a new account, pass the challenges for the
 #### TLS/SSL in general
 
 - [Bulletproof SSL and TLS](https://www.feistyduck.com/books/bulletproof-ssl-and-tls/) - wonderful ~500 page book, goes into great detail about everything you might want to know about SSL/TLS
-- [SSL/TLS Deployment Best Practices](https://github.com/ssllabs/research/wiki/SSL-and-TLS-Deployment-Best-Practices) - By the same author as *Bulletproof*, an up-to-date and thorough checklist
-- [TLS chapter in High Performance Browser Networking](http://chimera.labs.oreilly.com/books/1230000000545/ch04.html) - like the TL;DR of *Bulletproof*, covers all the fundamentals, plus more recent developments like OCSP stapling, HSTS etc.
+- [SSL/TLS Deployment Best Practices](https://github.com/ssllabs/research/wiki/SSL-and-TLS-Deployment-Best-Practices) - By the same author as _Bulletproof_, an up-to-date and thorough checklist
+- [TLS chapter in High Performance Browser Networking](http://chimera.labs.oreilly.com/books/1230000000545/ch04.html) - like the TL;DR of _Bulletproof_, covers all the fundamentals, plus more recent developments like OCSP stapling, HSTS etc.
 - [OWASP's TLS Cheat Sheet](https://www.owasp.org/index.php/Transport_Layer_Protection_Cheat_Sheet) - An excellent list of do's and don't relating to SSL/TLS
 - [Modern SSL/TLS Best Practices for Fast, Secure Websites](https://www.infosecurity-magazine.com/white-papers/ssltls-best-practices/) (PDF, registration required) - decent white paper, with loads of visuals, up-to-date best practice recommendations
 - [SSL Best Practices: a Quick and Dirty Guide](https://www.ssl.com/guide/ssl-best-practices-a-quick-and-dirty-guide/) - top-level, reasonably recent (2015) best practices guide.
@@ -1899,40 +1899,44 @@ In other words, you'll need to create a new account, pass the challenges for the
 
 <img src='https://avatars3.githubusercontent.com/u/636814?v=3&s=100'>
 
-Alex Peattie / [alexpeattie.com](https://alexpeattie.com/) / [@alexpeattie](https://twitter.com/alexpeattie) 
+Alex Peattie / [alexpeattie.com](https://alexpeattie.com/) / [@alexpeattie](https://twitter.com/alexpeattie)
 
 <br>
 
 ## Changelog
 
 #### Version 2.0 - May 12 2020
-* Big update, rewrite the guide and client to conform to the new [V2 API](https://acme-v02.api.letsencrypt.org/)/[RFC 8555](https://tools.ietf.org/html/rfc8555)
-* Add support for wildcard certificates in the client and guide
-* Upgrade to Ruby 2.7
-* Migrate away from the legacy DNSimple API/gem
-* Add more detail on certificate revocation (including reason codes), and EC curves
-* Lots of other info updated, e.g. rate limit changes, LE root certificate becoming trusted
+
+- Big update, rewrite the guide and client to conform to the new [V2 API](https://acme-v02.api.letsencrypt.org/)/[RFC 8555](https://tools.ietf.org/html/rfc8555)
+- Add support for wildcard certificates in the client and guide
+- Upgrade to Ruby 2.7
+- Migrate away from the legacy DNSimple API/gem
+- Add more detail on certificate revocation (including reason codes), and EC curves
+- Lots of other info updated, e.g. rate limit changes, LE root certificate becoming trusted
 
 #### Version 1.2 - Aug 7 2017
-* Add Appendix 7 explaining how to use EC client keys
-* Add Appendix 8 about certificate expiry and revocation
-* Add note about terms of service URL now being available via the directory
-* Update Appendix 4 with up-to-date rate limits, note about forthcoming wildcard certs
+
+- Add Appendix 7 explaining how to use EC client keys
+- Add Appendix 8 about certificate expiry and revocation
+- Add note about terms of service URL now being available via the directory
+- Update Appendix 4 with up-to-date rate limits, note about forthcoming wildcard certs
 
 #### Version 1.1 - Nov 19 2016
-* Use the directory and response headers, rather than hardcoding URIs (closes [#1](https://github.com/alexpeattie/letsencrypt-fromscratch/issues/1))
-* Add Appendix 6 about newly supported Internationalized Domain Names
-* Change reference to official Let's Encrypt client → certbot
-* Specify a TTL for DNS challenge record
-* Add note about certificate and authorization validity periods
-* Consistently prefer single quotes in all Ruby code
-* Remove example domains for the various certificate types
-* Added a couple more tools to the Testing section
-* Add Changelog & Author section
-* Harden example nginx config with additional security headers
+
+- Use the directory and response headers, rather than hardcoding URIs (closes [#1](https://github.com/alexpeattie/letsencrypt-fromscratch/issues/1))
+- Add Appendix 6 about newly supported Internationalized Domain Names
+- Change reference to official Let's Encrypt client → certbot
+- Specify a TTL for DNS challenge record
+- Add note about certificate and authorization validity periods
+- Consistently prefer single quotes in all Ruby code
+- Remove example domains for the various certificate types
+- Added a couple more tools to the Testing section
+- Add Changelog & Author section
+- Harden example nginx config with additional security headers
 
 #### Version 1.0 - Mar 29 2016
-* Initial release
+
+- Initial release
 
 <hr>
 
